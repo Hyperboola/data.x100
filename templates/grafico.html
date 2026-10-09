@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{#
+  Dati attesi (le misure le calcola charts/render.py, il template le disegna e basta):
+    occhiello, titolo, nota, fonte, pagina
+    forma        "orizzontale" (categorie, fino a 12), "colonne", "linea" o "area" (una serie nel tempo),
+                 "linee" (2-4 serie nel tempo), "ciambella" (parti di un totale)
+    barre        [{etichetta, testo, pct, evidenzia, mostra}]   pct = lunghezza in % della scala
+    riferimento  {testo, pct} oppure None                linea tratteggiata
+    altezza_barra, valore_px
+#}
+{% block style %}
+.testata { display: flex; flex-direction: column; gap: 20px; }
+.occhiello { font-size: 22px; color: var(--grigio-nota); }
+.testata .titolo { font-size: 72px; line-height: 1.04; }
+.grafico { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 48px 0; min-height: 0; }
+.nota { font-size: 30px; line-height: 1.4; max-width: 880px; margin-bottom: 40px; }
+.piede { color: var(--grigio-nota); }
+.valore { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; letter-spacing: -1px; white-space: nowrap;
+          background: var(--nebbia); padding: 0 4px; z-index: 2; }
+.evidenza { background: var(--arancio); }
+.neutra { background: var(--grigio-barre); }
+.rif-testo { font-family: "IBM Plex Mono", monospace; font-weight: 500; font-size: 20px; white-space: nowrap; }
+
+/* Barre orizzontali */
+.oriz { display: flex; flex-direction: column; gap: 36px; }
+.oriz .riga { display: flex; align-items: center; gap: 28px; }
+.oriz .etichetta { width: 230px; flex: none; font-weight: 600; font-size: 30px; line-height: 1.15;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.oriz .traccia { flex: 1; position: relative; height: 100%; }
+.oriz .barra { position: absolute; left: 0; top: 0; bottom: 0; }
+.oriz .valore { position: absolute; top: 50%; transform: translateY(-50%); margin-left: 14px; }
+.oriz .linea { position: absolute; top: -18px; bottom: -18px; border-left: 3px dashed var(--inchiostro); z-index: 1; }
+.oriz .rif-riga { display: flex; gap: 28px; margin-bottom: -12px; }
+.oriz .rif-riga .traccia { height: 24px; }
+.oriz .rif-riga .rif-testo { position: absolute; transform: translateX(-50%); bottom: 0; }
+
+/* Colonne */
+.leggenda { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+.leggenda .tratteggio { width: 44px; border-top: 2px dashed var(--inchiostro); }
+.colonne { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.colonne .area { flex: 1; position: relative; display: flex; gap: 12px; border-bottom: 2px solid var(--inchiostro); }
+.colonne .col { flex: 1; position: relative; }
+.colonne .barra { position: absolute; left: 6%; right: 6%; bottom: 0; }
+.colonne .valore { position: absolute; left: 50%; transform: translateX(-50%); margin-bottom: 8px; }
+.colonne .linea { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--inchiostro); z-index: 1; }
+.colonne .etichette { display: flex; gap: 12px; margin-top: 12px; }
+.colonne .etichette div { flex: 1; text-align: center; font-family: "IBM Plex Mono", monospace; font-size: 20px; color: var(--grigio-nota); }
+
+/* Linea */
+.linea-g { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.linea-g .area { flex: 1; position: relative; border-bottom: 2px solid var(--inchiostro); margin-top: 40px; }
+.linea-g svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.linea-g polyline { fill: none; stroke: var(--inchiostro); stroke-width: 5; vector-effect: non-scaling-stroke;
+                    stroke-linejoin: round; stroke-linecap: round; }
+.linea-g .nodo { position: absolute; width: 16px; height: 16px; border-radius: 50%; background: var(--inchiostro);
+                 transform: translate(-50%, 50%); z-index: 2; }
+.linea-g .nodo.evidenza { width: 30px; height: 30px; background: var(--arancio); border: 5px solid var(--nebbia); }
+.linea-g .valore { position: absolute; transform: translateX(-50%); margin-bottom: 22px; }
+.linea-g .rif { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--inchiostro); z-index: 1; }
+.linea-g .etichette { display: flex; gap: 12px; margin-top: 12px; }
+.linea-g .etichette div { flex: 1; text-align: center; font-family: "IBM Plex Mono", monospace; font-size: 20px; color: var(--grigio-nota); }
+.linea-g polygon.riempimento { fill: var(--grigio-barre); opacity: .45; stroke: none; }
+
+/* Più linee */
+.legenda-linee { display: flex; flex-wrap: wrap; gap: 12px 36px; margin-bottom: 8px; font-size: 26px; }
+.voce { display: flex; align-items: center; gap: 12px; }
+.pallino { width: 18px; height: 18px; border-radius: 50%; flex: none; }
+.voce b { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; }
+
+/* Ciambella */
+.ciambella-g { flex: 1; min-height: 0; display: flex; align-items: center; gap: 56px; }
+.ciambella { position: relative; width: 430px; height: 430px; flex: none; }
+.ciambella svg { width: 100%; height: 100%; }
+.centro-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+.centro-c .numero { font-size: 46px; letter-spacing: -1px; }
+.centro-c .mono { font-size: 20px; color: var(--grigio-nota); }
+.legenda-c { flex: 1; display: flex; flex-direction: column; gap: 24px; font-size: 26px; line-height: 1.2; }
+.legenda-c .voce { display: grid; grid-template-columns: 18px 1fr auto; gap: 14px; align-items: center; }
+.legenda-c .quota { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 34px; }
+.legenda-c .in-evidenza .quota { color: var(--arancio); }
+.legenda-c .in-evidenza { font-weight: 600; }
+{% endblock %}
+{% block body %}
+<div class="slide chiara">
+  <div class="testata">
+    <div class="occhiello mono">{{ occhiello }}</div>
+    <div class="titolo">{{ titolo }}</div>
+  </div>
+
+  <div class="grafico">
+  {% if forma == "orizzontale" %}
+    <div class="oriz" style="gap: {{ gap_righe }}px">
+      {% if riferimento %}
+      <div class="rif-riga">
+        <div class="etichetta"></div>
+        <div class="traccia"><div class="rif-testo" style="left: {{ riferimento.pct }}%">{{ riferimento.testo }}</div></div>
+      </div>
+      {% endif %}
+      {% for b in barre %}
+      <div class="riga" style="height: {{ altezza_barra }}px">
+        <div class="etichetta" style="font-size: {{ etichetta_px }}px">{{ b.etichetta }}</div>
+        <div class="traccia">
+          <div class="barra {{ 'evidenza' if b.evidenzia else 'neutra' }}" style="width: {{ b.pct }}%"></div>
+          <div class="valore" style="left: {{ b.pct }}%; font-size: {{ valore_px }}px">{{ b.testo }}</div>
+          {% if riferimento %}<div class="linea" style="left: {{ riferimento.pct }}%"></div>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% elif forma in ("linea", "area") %}
+    {% if riferimento %}
+    <div class="leggenda"><div class="tratteggio"></div><div class="rif-testo">{{ riferimento.testo }}</div></div>
+    {% endif %}
+    <div class="linea-g">
+      <div class="area">
+        {% if riferimento %}<div class="rif" style="bottom: {{ riferimento.pct }}%"></div>{% endif %}
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{% if tracciato_area %}<polygon class="riempimento" points="{{ tracciato_area }}"/>{% endif %}<polyline points="{{ tracciato }}"/></svg>
+        {% for b in barre %}{% if b.testo %}
+        <div class="nodo{{ ' evidenza' if b.evidenzia }}" style="left: {{ b.x }}%; bottom: {{ b.pct }}%"></div>
+        {% if b.mostra %}<div class="valore" style="left: {{ b.x }}%; bottom: {{ b.pct }}%; font-size: {{ valore_px }}px">{{ b.testo }}</div>{% endif %}
+        {% endif %}{% endfor %}
+      </div>
+      <div class="etichette">{% for b in barre %}<div>{{ b.etichetta }}</div>{% endfor %}</div>
+    </div>
+  {% elif forma == "linee" %}
+    <div class="legenda-linee">{% for l in linee|reverse %}<div class="voce"><span class="pallino" style="background: {{ l.colore }}"></span>{{ l.nome }} <b>{{ l.testo }}</b></div>{% endfor %}</div>
+    <div class="linea-g">
+      <div class="area">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{% for l in linee %}<polyline points="{{ l.tracciato }}" style="stroke: {{ l.colore }}; stroke-width: {{ 7 if l.evidenzia else 4 }}"/>{% endfor %}</svg>
+        {% for l in linee %}<div class="nodo{{ ' evidenza' if l.evidenzia }}" style="left: {{ l.ultimo.x }}%; bottom: {{ l.ultimo.pct }}%; background: {{ l.colore }}"></div>{% endfor %}
+      </div>
+      <div class="etichette">{% for e in etichette %}<div>{{ e }}</div>{% endfor %}</div>
+    </div>
+  {% elif forma == "ciambella" %}
+    <div class="ciambella-g">
+      <div class="ciambella">
+        <svg viewBox="0 0 42 42" aria-hidden="true">{% for sp in spicchi %}<circle cx="21" cy="21" r="15.915" fill="none" stroke="{{ sp.colore }}" stroke-width="{{ 7.5 if sp.evidenzia else 6 }}" pathLength="100" stroke-dasharray="{{ sp.lunghezza }} {{ 100 - sp.lunghezza }}" stroke-dashoffset="{{ sp.inizio + 25 }}"/>{% endfor %}</svg>
+        <div class="centro-c"><div class="numero">{{ centro }}</div><div class="mono">totale</div></div>
+      </div>
+      <div class="legenda-c">{% for sp in spicchi %}<div class="voce{{ ' in-evidenza' if sp.evidenzia }}"><span class="pallino" style="background: {{ sp.colore }}"></span><span>{{ sp.nome }}</span><span class="quota">{{ sp.quota }}</span></div>{% endfor %}</div>
+    </div>
+  {% else %}
+    {% if riferimento %}
+    <div class="leggenda"><div class="tratteggio"></div><div class="rif-testo">{{ riferimento.testo }}</div></div>
+    {% endif %}
+    <div class="colonne">
+      <div class="area">
+        {% if riferimento %}<div class="linea" style="bottom: {{ riferimento.pct }}%"></div>{% endif %}
+        {% for b in barre %}
+        <div class="col">
+          {% if b.testo %}
+          <div class="barra {{ 'evidenza' if b.evidenzia else 'neutra' }}" style="height: {{ b.pct }}%"></div>
+          {% if b.mostra %}<div class="valore" style="bottom: {{ b.pct }}%; font-size: {{ valore_px }}px">{{ b.testo }}</div>{% endif %}
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="etichette">{% for b in barre %}<div>{{ b.etichetta }}</div>{% endfor %}</div>
+    </div>
+  {% endif %}
+  </div>
+
+  {% if nota %}<div class="nota">{{ nota }}</div>{% endif %}
+  <div class="piede">
+    <div class="fonte">{{ fonte }}</div>
+    {% if pagina %}<div class="pagina">{{ pagina }}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

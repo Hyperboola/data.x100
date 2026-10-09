@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: "Bricolage Grotesque"; src: url("{{ fonts.bricolage }}") format("truetype"); font-weight: 200 800; }
+@font-face { font-family: "Instrument Sans"; src: url("{{ fonts.instrument }}") format("truetype"); font-weight: 400 700; }
+@font-face { font-family: "IBM Plex Mono"; src: url("{{ fonts.mono }}") format("truetype"); font-weight: 400; }
+@font-face { font-family: "IBM Plex Mono"; src: url("{{ fonts.mono_medium }}") format("truetype"); font-weight: 500; }
+
+:root {
+  --inchiostro: {{ c.INCHIOSTRO }};
+  --nebbia: {{ c.NEBBIA }};
+  --arancio: {{ c.ARANCIO }};
+  --blu: {{ c.BLU }};
+  --grigio-barre: {{ c.GRIGIO_BARRE }};
+  --grigio-nota: {{ c.GRIGIO_NOTA }};
+  --grigio-chiaro: #A9B3C2;
+  --testo-chiaro: #D3D8DF;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1080px; height: 1440px; overflow: hidden; }
+body { font-family: "Instrument Sans", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
+
+.slide { width: 1080px; height: 1440px; padding: 88px 88px 72px; display: flex; flex-direction: column; }
+.slide.scura { background: var(--inchiostro); color: var(--nebbia); }
+.slide.chiara { background: var(--nebbia); color: var(--inchiostro); }
+
+.mono { font-family: "IBM Plex Mono", monospace; }
+.titolo { font-family: "Bricolage Grotesque", sans-serif; font-weight: 600; letter-spacing: -2px; }
+.numero { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; }
+.logo { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 48px; line-height: .9; letter-spacing: -1.5px; }
+.logo span { color: var(--arancio); }
+
+.piede { display: flex; justify-content: space-between; align-items: flex-end; gap: 32px; font-family: "IBM Plex Mono", monospace; font-size: 20px; }
+.piede .fonte { flex: 1; min-width: 0; }
+.piede .pagina { white-space: nowrap; }
+{% block style %}{% endblock %}
+</style>
+</head>
+<body>
+{% block body %}{% endblock %}
+</body>
+</html>

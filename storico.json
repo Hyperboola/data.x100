@@ -1,0 +1,34 @@
+[
+  {
+    "data": "2026-10-09",
+    "serie": "122_54_DF_DCSC_TUR_13|ADJUSTMENT=N,COASTAL_AREA=ALL,COUNTRY_RES_GUESTS=WORLD,DATA_TYPE=AR,ECON_ACTIVITY_NACE_2007=551_553,~07122d3e2df3",
+    "flow": "122_54_DF_DCSC_TUR_13",
+    "filtri": {
+      "FREQ": "A",
+      "DATA_TYPE": "AR",
+      "ADJUSTMENT": "N",
+      "TYPE_ACCOMMODATION": "ALL",
+      "ECON_ACTIVITY_NACE_2007": "551_553",
+      "COUNTRY_RES_GUESTS": "WORLD",
+      "LOCALITY_TYPE": "ALL",
+      "URBANIZ_DEGREE": "ALL",
+      "COASTAL_AREA": "ALL",
+      "SIZE_BY_NUMBER_ROOMS": "TOT",
+      "REF_AREA": "IT"
+    },
+    "url": "https://esploradati.istat.it/SDMXWS/rest/data/122_54_DF_DCSC_TUR_13/A.IT.AR.N.ALL.551_553.WORLD.ALL.ALL.ALL.TOT",
+    "sottotema": "turismo",
+    "slot": "annuale",
+    "tipo_storia": "serie",
+    "grafico": "colonne",
+    "periodo": "2025",
+    "ultimo_valore": 160765334,
+    "copertina": "ULTIMO",
+    "numero": "160,77 mln arrivi",
+    "domanda": "Turismo record in Italia",
+    "titolo": "Il più alto degli ultimi 10 anni",
+    "da_controllare": [
+      "Salto insolito nel 2025: +15,1%, contro un cambiamento tipico di circa 4,5% l'anno. Prima di pubblicare verifica sul sito ISTAT se è cambiato il metodo o il campo di osservazione (serie non confrontabile)."
+    ]
+  }
+]

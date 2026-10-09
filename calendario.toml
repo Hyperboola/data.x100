@@ -1,0 +1,137 @@
+# Calendario editoriale di Data%
+#
+# Ogni giorno ha un macro-tema fisso e dei sottotemi che ruotano: ogni settimana tocca
+# al sottotema usato meno di recente. Accanto a ogni sottotema ci sono le categorie del
+# catalogo ISTAT da cui pescare i dataset (ogni codice include le sue sottocategorie).
+# Codici disponibili: python -m pipeline.categorie --cerca <parola>
+
+# Claude: false = pipeline senza AI. Dataset e serie scelti con regole, grafico da [racconto],
+# testi di partenza a modello: li scrivi tu in redazione (python -m pipeline.redazione).
+usa_claude = false
+
+# Modello per le chiamate a Claude, quando servono (es. "Suggerisci" in redazione).
+# Per scrivere una frase basta un modello leggero: "haiku". Più potenti: "sonnet", "opus".
+modello_claude = "haiku"
+
+# Fasce di dati che il job può pubblicare: annuali, trimestrali, mensili
+slot = ["annuale", "trimestrale", "mensile"]
+
+# Post al giorno (da 1 a 3). Con 1, le fasce si alternano: ogni giorno si parte da quella
+# pubblicata meno di recente, e se non trova niente si passa alla successiva.
+post_al_giorno = 1
+
+# Revisione automatica (solo con usa_claude = true): un secondo Claude rilegge la storia con i dati
+# completi e cerca affermazioni false. Costa una chiamata in più per post; i dubbi finiscono nel riepilogo.
+revisione = true
+
+# Chi sceglie il dataset del giorno tra i candidati del sottotema:
+#   "claude"  → Claude li mette in classifica (una chiamata in più, scelte più interessanti)
+#   "recente" → il più aggiornato tra quelli non tecnici (nessuna chiamata, scelte più prevedibili)
+# Con usa_claude = false vale sempre "recente".
+scelta_dataset = "claude"
+
+# Ogni dataset viene usato una volta sola. Quando un sottotema li ha esauriti tutti,
+# si ricomincia dai dataset usati meno di recente, ma non prima di queste settimane
+# (e Claude deve raccontare una storia diversa dall'ultima volta).
+pausa_settimane = 8
+
+# Come raccontare ogni sottotema quando Claude è spento (con Claude acceso è solo un suggerimento).
+#   storia: "serie" (un fenomeno nel tempo) o "confronto" (le aree d'Italia nell'ultimo anno)
+#   grafico: per le serie "linea", "colonne" o "area"; per i confronti "barre" o "ciambella"
+# Se il grafico non è adatto ai dati del giorno, il codice usa il più adatto. Si cambia anche in redazione.
+[racconto]
+default             = { storia = "serie", grafico = "linea" }
+prezzi              = { storia = "serie", grafico = "colonne" }
+stipendi_redditi    = { storia = "confronto", per = "territorio", grafico = "barre" }
+poverta_disuguaglianze = { storia = "confronto", per = "territorio", grafico = "barre" }
+occupazione         = { storia = "confronto", per = "territorio", grafico = "barre" }
+nascite             = { storia = "serie", grafico = "linea" }
+invecchiamento      = { storia = "serie", grafico = "area" }
+stranieri           = { storia = "confronto", per = "territorio", grafico = "barre" }
+casa_affitti        = { storia = "serie", grafico = "colonne" }
+turismo             = { storia = "confronto", per = "territorio", grafico = "barre" }
+tecnologia_internet = { storia = "serie", grafico = "colonne" }
+
+# Età massima dell'ultimo dato, in mesi dalla fine del periodo
+[freschezza]
+annuale = 24
+trimestrale = 7
+mensile = 4
+
+# Quanti periodi mostrare nel grafico (13 mesi e 12 trimestri includono l'anno prima)
+[finestra]
+annuale = 10
+trimestrale = 12
+mensile = 13
+
+# Temi mai scelti in automatico: richiedono una scelta editoriale umana
+[esclusi]
+categorie = [
+    "POLITICAL_PART",    # partecipazione politica
+    "DCIS_SUICIDI",      # suicidi
+    "HEA_WOMHEALT",      # interruzioni di gravidanza
+    "GENDER_VIOL",       # violenza sulle donne
+    "JUS_CRIMINAL",      # reati e procedimenti penali
+    "SOC_ACT_RELIG",     # pratica religiosa
+]
+
+[giorni.lunedi]
+tema = "Soldi"
+[giorni.lunedi.sottotemi]
+prezzi                 = ["PRI_CONWHONAT", "PRI_HARCONEU", "PRI_CONBWCOL"]
+stipendi_redditi       = ["HOU_INCOME", "MEF_REDDITIIRPEF_COM", "DCSC_RACLI", "LAB_EMPL_WAGENTERPR"]
+risparmio_debiti       = ["DCCV_IMPREV", "DCCV_ARRETRATI", "DCCV_CARICOPES", "HOU_OWNDG", "DCAT_SERVBANC_COM", "JUS_PROTESTBANKRUPT"]
+consumi_famiglie       = ["HOU_CONSEXP", "DCSC_COMMDET_1", "DCSC_FIDCONS"]
+poverta_disuguaglianze = ["HOU_POVER", "DCCV_RISKPOV", "DCCV_DIFFBENDUR", "DCCV_REDDFINMES", "PERCEPIT"]
+
+[giorni.martedi]
+tema = "Lavoro e imprese"
+[giorni.martedi.sottotemi]
+occupazione     = ["LAB_OFF_EMPLOY", "LAB_OFF_UNEMPLOY", "LAB_OFF_INACTIV"]
+giovani_lavoro  = ["STUD_CHAR_TRWORK"]
+contratti_orari = ["LAB_EMPL_PAYJHWORK", "LAB_EMPL_NATLABCONT", "LAB_EMPL_LABCOSTENTPA"]
+imprese         = ["ENT_STRU", "SIR_IND", "ENT_COMP", "DCSP_LACIS", "DCSP_ICT", "DCSP_RS", "DCSC_IESI"]
+industria       = ["IND_PRODUCTION", "DCSC_ORDFATT", "DCSC_FIDIMPRMAN", "DCSC_FIDIMPRCOSTR", "DCSC_FATTSERVIZ_1", "UP_ACC_TRIMES"]
+export          = ["PORTAL", "DCSC_PREIMPIND"]
+
+[giorni.mercoledi]
+tema = "Chi siamo"
+[giorni.mercoledi.sottotemi]
+nascite            = ["POP_BIRTHFERT"]
+invecchiamento     = ["POP_POPULATION", "POP_MORTALITY", "POP_DEMOPROJ"]
+famiglie_matrimoni = ["POP_HOUSEHOLDS", "POP_MARUNION", "POP_SEPDIV"]
+migrazioni         = ["POP_MIGRATIONS"]
+istruzione         = ["DCIS_SCUOLE", "UNIVERSITY", "DCCV_POPTIT1_UNT2020", "DCCV_ESL_UNT2020"]
+stranieri          = ["POP_FOREIGNIM"]
+
+[giorni.giovedi]
+tema = "Casa, città, ambiente"
+[giorni.giovedi.sottotemi]
+casa_affitti       = ["DCSP_IPAB", "HOU_HOUSING", "BUILDING_PERMITS", "DCSC_FABBRESID_1"]
+trasporti_mobilita = ["DCSC_INDTRAEREO", "DCSC_TRAMAR", "DCSC_TRAFERR", "DCSC_TRAMERCIS1", "USUAL_WAY_SC_WR", "DCCV_URBANENV_URBMOB", "MESNS_TRASNSP"]
+sicurezza_stradale = ["HEA_ROAD"]
+rifiuti            = ["DCCV_URBANENV_MUNWAS", "ENV_WATER", "DCCV_URBANENV_WATER"]
+energia            = ["ENV_ENERG", "DCCV_URBANENV_ENERGY", "SERVICES_SUPP_EG"]
+aria_clima         = ["DCCV_URBANENV_AIRQU", "DCCV_URBANENV_NOISE", "UP2_ACC_AMBIEN", "DCCV_PROBLZONRES_2", "DCCV_CARGEOMOR_COM"]
+
+[giorni.venerdi]
+tema = "Vita quotidiana"
+[giorni.venerdi.sottotemi]
+turismo             = ["SER_TOURISM", "COM_TRIPS"]
+cultura             = ["DCIS_MUSVIS", "DCIS_MUSVIS_COM", "DCIS_BIBLIOT", "DCIS_PUBBLICATE2", "COM_ENT_USERS", "COM_MMED_BOOKS_USERS"]
+sport               = ["SPORT_FRIENDS", "TIME_USE", "VOLUNTEERING"]
+tecnologia_internet = ["DCCV_ICT", "COM_INT_PC_USERS"]
+salute_stili_vita   = ["HEA_STYLE_SMOK", "HEA_STYLE_DRINK", "HEA_STYLE_BOMAS", "HEA_STYLE_DOACC", "HEA_HESTDRUGS", "HEA_SERVICES", "SATISF_LW"]
+cibo                = ["HEA_STYLE_FOHAB", "AGR_CRP", "AGR_QUA", "AGR_PRICE"]
+
+[giorni.sabato]
+tema = "Il mondo ×100"
+preferiti = true   # il sabato pubblica solo le serie di preferiti.toml (finché non c'è Eurostat)
+[giorni.sabato.sottotemi]
+italia_europa    = []   # arriverà con Eurostat
+demografia_mondo = []   # arriverà con Eurostat
+economia_mondo   = []   # arriverà con Eurostat
+clima_mondo      = []   # arriverà con Eurostat
+
+[giorni.domenica]
+tema = ""   # vuoto = pausa

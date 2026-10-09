@@ -1,0 +1,18 @@
+# Serie preferite: pubblicate nei giorni con "preferiti = true" in calendario.toml
+# (oggi il sabato). Negli altri giorni il job esplora il catalogo da solo.
+# Per trovare dataset e codici:
+#   python -m pipeline.categorie <sottotema>
+#   python -m pipeline.categorie --dataset <id>
+#
+# Campi: id, frequenza, flow, filtri (un codice per dimensione), occhiello, domanda,
+# soggetto; facoltativi: decimali, unita, fonte_testo.
+
+[[serie]]
+id = "nati_italia"
+frequenza = "annuale"
+flow = "25_74_DF_DCIS_NATI2_1"
+filtri = { FREQ = "A", RESIDENCE_TERR = "IT", DATA_TYPE = "LBIRTH" }
+occhiello = "Nascite · Italia"
+domanda = "Quanti bambini nascono in Italia?"
+soggetto = "nati vivi in Italia"
+fonte_testo = "ISTAT, Nati serie storica"

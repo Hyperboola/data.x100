@@ -1,8 +1,10 @@
 """La giornata di Data%: calendario → serie → storia → slide.
 
     python -m pipeline.run                          # i post di oggi
-    python -m pipeline.run --settimana              # i post dei 7 giorni a partire da domani
-    python -m pipeline.run --settimana --dal 2026-10-12
+    python -m pipeline.run --settimana              # i post della prossima settimana, da lunedì a domenica
+    python -m pipeline.run --settimana --settimane 2  # le prossime due settimane
+    python -m pipeline.run --settimana --dal 2026-10-12   # 7 giorni da una data precisa
+    python -m pipeline.run --settimana --rifai      # rifà anche i giorni già preparati
     python -m pipeline.run --giorno lunedi          # come se fosse lunedì
     python -m pipeline.run --serie nati_italia      # una serie preferita (prova, non va nello storico)
     python -m pipeline.run --serie X --forza        # anche se il dato non è fresco
@@ -22,13 +24,14 @@ dati, più riepilogo.md. Poi: python -m pipeline.redazione per rivedere, scriver
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import logging
 import re
 import shutil
 import time
 import unicodedata
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from config import ROOT
@@ -37,7 +40,7 @@ from pipeline.claude import riepilogo_consumi
 from pipeline.disegna import OUTPUT_DIR, render
 from pipeline.periodi import Periodo
 from pipeline.racconta import costruisci_carosello
-from pipeline.scegli import (DatasetEsauriti, NessunaSerie, SerieNonValida, pulisci_nome, scegli,
+from pipeline.scegli import (DatasetEsauriti, NessunaSerie, SerieNonValida, fascia_esaurita, pulisci_nome, scegli,
                              scegli_senza_claude)
 from sources.istat import Istat
 from sources.rete import FonteNonDisponibile
@@ -100,7 +103,10 @@ def scarica(s: dict, cal: dict, forza: bool = False):
         raise NonPubblicabile("i filtri non individuano una sola serie")
     if s.get("decimali") is None:  # serie scelte senza Claude: decimali dedotti dai valori
         valori = df["obs_value"].dropna().abs()
-        s["decimali"] = 0 if (valori % 1 == 0).all() or valori.max() >= 100 else (1 if valori.max() >= 10 else 2)
+        massimo = 0 if (valori % 1 == 0).all() or valori.abs().max() >= 100 else (1 if valori.abs().max() >= 10 else 2)
+        # mai più decimali di quelli che ISTAT pubblica: 9,6 resta 9,6 e non diventa 9,60
+        osservati = max(len(f"{v:.6f}".rstrip("0").split(".")[1]) for v in valori)
+        s["decimali"] = min(massimo, osservati)
     ultimo = Periodo.da_codice(df["time_period"].max())
     if ultimo.frequenza != s["frequenza"]:
         raise NonPubblicabile(f"dati {ultimo.frequenza}, serviva {s['frequenza']}")
@@ -223,11 +229,22 @@ def giornata(cal: dict, preferiti: list[dict], giorno: str, usa_claude: bool = T
         sottotemi = [s for s, cod in g.get("sottotemi", {}).items() if cod]
         ordine = sorted(sottotemi, key=lambda s: (uso.get(s, ""), sottotemi.index(s)))
         log.info("Sottotema del giorno: %s", ordine[0] if ordine else "-")
-        for slot in fasce:
+        # Prima il sottotema a cui tocca, in ogni fascia (la meno recente per prima); solo se non ha
+        # niente di pubblicabile si passa al sottotema successivo. Ogni post: sottotema e fascia diversi.
+        usate = set()
+        for sott in ordine:
             if len(pubblicati) >= quanti:
                 break
-            if not any(_esplora(sott, slot, cal, storico, creati, pubblicati, usa_claude) for sott in ordine):
-                log.info("%s: nessun post per la fascia %s, provo la successiva", g["tema"], slot)
+            rimaste = [f for f in fasce if f not in usate]
+            for slot in rimaste:
+                # la fascia preferita ha un solo giro (8 dataset): se lì non c'è, si passa subito alla
+                # successiva, che riusa quello che si è appena letto. L'ultima fascia ha tutti i giri.
+                giri = TENTATIVI_ESPLORAZIONE if slot == rimaste[-1] else 1
+                if _esplora(sott, slot, cal, storico, creati, pubblicati, usa_claude, giri=giri):
+                    usate.add(slot)
+                    break
+            else:
+                log.info("%s: niente di pubblicabile in nessuna fascia, provo il sottotema successivo", sott)
     if len(pubblicati) < quanti:
         log.warning("%s: pubblicati %s post su %s", g["tema"], len(pubblicati), quanti)
     log.info("Consumo di oggi: %s", riepilogo_consumi())
@@ -253,18 +270,25 @@ def _pubblica(s: dict, cal: dict, usa_claude: bool, storico: list[dict], creati:
 
 
 def _esplora(sott: str, slot: str, cal: dict, storico: list[dict], creati: list, pubblicati: list,
-             usa_claude: bool = True) -> bool:
+             usa_claude: bool = True, giri: int = TENTATIVI_ESPLORAZIONE) -> bool:
     """Prima i dataset mai usati; solo se il sottotema li ha esauriti, quelli usati fuori dalla pausa."""
     global _claude_finito, _istat_giu
     if _claude_finito or _istat_giu:
         return False
+    try:  # se la memoria dice già che qui non c'è niente di questa fascia, inutile cercare
+        if n := fascia_esaurita(sott, slot, cal):
+            log.info("%s/%s: nessuno dei %s dataset già controllati ha dati %s freschi, salto subito la fascia",
+                     sott, slot, n, slot)
+            return False
+    except Exception as exc:  # catalogo non disponibile: si cerca come sempre
+        log.debug("controllo fascia non riuscito: %s", exc)
     pausa = cal["pausa_settimane"] * 7
     mai = {v["flow"] for v in storico}
     recenti = {v["flow"] for v in storico if abs((QUANDO - date.fromisoformat(v["data"])).days) < pausa}
     falliti, inizio = set(), time.monotonic()  # dataset che oggi non vanno: non si riprovano
     for esclusi, giro in ((mai, "dataset mai usati"), (recenti, "dataset già usati, fuori pausa")):
         provati = esclusi | falliti
-        for _ in range(TENTATIVI_ESPLORAZIONE):
+        for _ in range(giri):
             if time.monotonic() - inizio > MINUTI_PER_FASCIA * 60:
                 log.warning("%s/%s: superati %s minuti, salto la fascia", sott, slot, MINUTI_PER_FASCIA)
                 return False
@@ -307,14 +331,42 @@ def _riepilogo(giorno: str, tema: str, pubblicati: list) -> Path:
     """output/AAAA-MM-GG/riepilogo.md: i post del giorno con didascalie, pronti da pubblicare."""
     righe = [f"# {QUANDO.isoformat()} · {giorno} · {tema}\n", f"_{riepilogo_consumi()}_\n"]
     for voce, paths in pubblicati:
-        slide = ", ".join(p.name for p in paths if p.suffix == ".jpg")
+        slide = ", ".join(p.name for p in paths if p.suffix == ".jpg" and "_reel_" not in p.name)
+        reel = ", ".join(p.name for p in paths if p.suffix == ".jpg" and "_reel_" in p.name)
         didascalia = next(p for p in paths if p.name.endswith("_didascalia.txt")).read_text(encoding="utf-8")
         avvisi = [f"> ⚠ **Da controllare:** {a}" for a in voce.get("da_controllare") or []]
         righe += [f"## {voce['slot']} · {voce['sottotema']}", *avvisi, f"**{voce['domanda']}** ({voce['numero']})",
-                  f"Slide: {slide}", "", "```", didascalia, "```", ""]
+                  f"Slide: {slide}", f"Reel: {reel}", "", "```", didascalia, "```", ""]
     path = paths[0].parent / "riepilogo.md"
     path.write_text("\n".join(righe), encoding="utf-8")
     return path
+
+
+def prossimo_lunedi(oggi: date | None = None) -> date:
+    """Il lunedì della prossima settimana: da sabato o domenica è dopodomani o domani,
+    da lunedì è il lunedì dopo (la settimana in corso si considera già preparata)."""
+    oggi = oggi or date.today()
+    return oggi + timedelta(days=7 - oggi.weekday())
+
+
+def gia_preparato(giorno: date) -> bool:
+    """Ci sono già post per quel giorno di pubblicazione?"""
+    return any((OUTPUT_DIR / giorno.isoformat()).glob("*_rapporto.json"))
+
+
+def _durata(secondi: float) -> str:
+    """3725 -> '1 h 2 min 5 s'."""
+    s = int(secondi)
+    parti = [(s // 3600, "h"), (s % 3600 // 60, "min"), (s % 60, "s")]
+    return " ".join(f"{n} {u}" for n, u in parti if n) or "0 s"
+
+
+def _timer() -> None:
+    """Segna inizio e fine della pipeline; la fine si scrive anche se la interrompi con Ctrl+C."""
+    avvio, t0 = datetime.now(), time.monotonic()
+    log.info("▶ Inizio pipeline: %s", avvio.strftime("%d/%m/%Y %H:%M:%S"))
+    atexit.register(lambda: log.info("■ Fine pipeline: %s · durata %s", datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                                     _durata(time.monotonic() - t0)))
 
 
 def main() -> None:
@@ -324,11 +376,15 @@ def main() -> None:
     parser.add_argument("--forza", action="store_true", help="con --serie: ignora la freschezza")
     parser.add_argument("--senza-claude", action="store_true", help="solo frasi a modello, anche se il calendario "
                         "dice usa_claude = true")
-    parser.add_argument("--settimana", action="store_true", help="prepara i post dei 7 giorni a partire da domani "
-                        "(o da --dal), ognuno nella cartella del suo giorno di pubblicazione")
+    parser.add_argument("--settimana", action="store_true", help="prepara i post della prossima settimana, da lunedì "
+                        "a domenica (o 7 giorni da --dal), ognuno nella cartella del suo giorno di pubblicazione")
+    parser.add_argument("--settimane", type=int, default=1, help="con --settimana: quante settimane preparare")
     parser.add_argument("--dal", help="con --settimana: primo giorno, AAAA-MM-GG")
+    parser.add_argument("--rifai", action="store_true", help="con --settimana: rifà anche i giorni già preparati "
+                        "(di solito si saltano, per non avere post doppi)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    _timer()
 
     global QUANDO
     cal = carica_calendario()
@@ -343,12 +399,20 @@ def main() -> None:
         except NonPubblicabile as exc:
             raise SystemExit(f"Non pubblicabile: {exc}. Usa --forza per generarla comunque.")
     elif args.settimana:
-        inizio = date.fromisoformat(args.dal) if args.dal else date.today() + timedelta(days=1)
+        inizio = date.fromisoformat(args.dal) if args.dal else prossimo_lunedi()
         creati = []
-        for i in range(7):
+        log.info("ISTAT accetta poche richieste al minuto: la prima volta ci vuole tempo (anche decine di minuti "
+                 "a giorno). Puoi interrompere con Ctrl+C e rilanciare: i giorni già pronti si saltano e ciò che "
+                 "si è scoperto sui dataset resta in memoria, quindi i giri successivi sono molto più veloci.")
+        for i in range(7 * max(1, args.settimane)):
             QUANDO = inizio + timedelta(days=i)
+            if not args.rifai and gia_preparato(QUANDO):
+                log.info("──── %s ──── già preparato, salto (usa --rifai per rifarlo)", QUANDO.isoformat())
+                continue
             log.info("──── %s ────", QUANDO.isoformat())
+            t_giorno = time.monotonic()
             creati += giornata(cal, preferiti, GIORNI[QUANDO.weekday()], usa_claude)
+            log.info("⏱ %s fatto in %s", QUANDO.isoformat(), _durata(time.monotonic() - t_giorno))
     else:
         creati = giornata(cal, preferiti, args.giorno or GIORNI[date.today().weekday()], usa_claude)
     for path in creati:

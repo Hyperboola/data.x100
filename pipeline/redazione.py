@@ -109,8 +109,9 @@ def problemi_di_pubblicazione(rap: dict) -> list[str]:
 def _ricostruisci(path: Path, s: dict, df: pd.DataFrame, nomi: dict, imposto: dict | None) -> dict:
     """Rifà slide, didascalia, dati e rapporto di un post; restituisce il rapporto nuovo."""
     cal = carica_calendario()
-    slides, testo_ig, nuovo = costruisci_carosello(s, df, cal["finestra"][s["frequenza"]], nomi=nomi,
-                                                   usa_claude=False, imposto=imposto)
+    # _post_esistente: le regole per scegliere un dataset nuovo non valgono su un post già fatto
+    slides, testo_ig, nuovo = costruisci_carosello({**s, "_post_esistente": True}, df, cal["finestra"][s["frequenza"]],
+                                                   nomi=nomi, usa_claude=False, imposto=imposto)
     nome = path.name.removesuffix("_rapporto.json")
     render(slides, nome=nome, out_dir=path.parent)
     didascalia = _file(path, "_didascalia.txt")
@@ -253,6 +254,8 @@ nav a.qui { background: #111418; color: white; } nav a .n { color: #5A6170; } na
 .post { background: white; border-radius: 16px; padding: 24px; margin-bottom: 32px; }
 .post h2 { margin: 0 0 4px; font-size: 20px; } .meta { color: #5A6170; font-size: 14px; margin-bottom: 16px; }
 .slide { display: flex; gap: 12px; margin-bottom: 20px; } .slide img { width: 32%; border-radius: 8px; }
+.formato { font-size: 13px; color: #5A6170; margin: 4px 0 6px; }
+.slide.reel img { width: 24%; }
 .avviso { background: #FFF1EC; border-left: 4px solid #F2542D; padding: 10px 14px; margin: 8px 0; border-radius: 6px; }
 .ok { background: #EAF6EE; border-left: 4px solid #2E8B57; padding: 10px 14px; margin: 8px 0; border-radius: 6px; }
 label { display: flex; align-items: baseline; gap: 10px; font-weight: 600; font-size: 14px; margin: 14px 0 4px; }
@@ -333,6 +336,12 @@ def pagina(giorno: str, messaggi: dict[str, str]) -> str:
         nome = path.name.removesuffix("_rapporto.json")
         ver = int(path.stat().st_mtime)
         slide = "".join(f'<img src="/img/{giorno}/{nome}_{i}.jpg?v={ver}">' for i in (1, 2, 3))
+        if (path.parent / f"{nome}_reel_1.jpg").exists():
+            reel = "".join(f'<img src="/img/{giorno}/{nome}_reel_{i}.jpg?v={ver}">' for i in (1, 2, 3))
+            reel = f'<div class="formato">Reel 9:16</div><div class="slide reel">{reel}</div>'
+        else:  # post creato prima dei reel: si generano al primo "Salva e rigenera"
+            reel = '<div class="formato">Reel 9:16: premi "Salva e rigenera" per crearli.</div>'
+        slide = f'<div class="formato">Post 3:4</div><div class="slide">{slide}</div>{reel}'
         avvisi = "".join(f'<div class="avviso">⚠ {html.escape(a)}</div>' for a in rap.get("da_controllare") or [])
         if rap.get("origine") and set(rap["origine"].values()) == {"modello"}:
             avvisi += '<div class="avviso">✍ Testi a modello: scrivili tu prima di approvare.</div>'
@@ -357,7 +366,7 @@ def pagina(giorno: str, messaggi: dict[str, str]) -> str:
             f'<div class="post" id="{nome}"><h2>{html.escape(rap["testi"]["domanda"])}{stato}</h2>'
             f'<div class="meta">{s["frequenza"]} · {s["sottotema"]} · {html.escape(s.get("fonte_testo", ""))}</div>'
             f'<div class="meta">Cosa misura la serie: {filtri_leggibili(s) or "(struttura non in cache)"}</div>'
-            f'{avvisi}<div class="slide">{slide}</div>'
+            f'{avvisi}{slide}'
             f'<form method="post" action="/salva"><input type="hidden" name="file" value="{path.name}">'
             f'<input type="hidden" name="giorno" value="{giorno}">'
             f'<label>Grafico</label><select name="grafico">{grafico}</select>{campi_serie}{campi}'

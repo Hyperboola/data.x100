@@ -212,6 +212,17 @@ def _decenni(coppie: list[tuple[Periodo, float]]) -> list[tuple[Periodo, float]]
     return scelti if scelti[-1] == coppie[-1] else scelti + [coppie[-1]]
 
 
+def numero_indice(r: dict) -> bool:
+    """Numeri indice a base fissa (es. prezzi, base 2025=100): il livello (105) non dice niente a chi legge,
+    contano solo le variazioni. Più stretto di e_indice, che scambia per indici anche gli 'indicatori'."""
+    nome = f"{r.get('fonte_testo', '')} {r.get('soggetto', '')}".lower()
+    return bool(re.search(r"base\s*(19|20)\d\d|\d{4}\s*=\s*100|numeri indice|indice (armonizzato|nazionale|"
+                          r"generale|dei prezzi)|prezzi al consumo|indice della produzione|indice del fatturato", nome))
+
+
+ASSOLUTE = {"anni", "mesi", "giorni", "ore", "°C"}  # età e durate: '+0,7 anni' si capisce, '+2,1%' no
+
+
 def storia_serie(r: dict, df: pd.DataFrame, finestra: int) -> Storia:
     coppie = [(Periodo.da_codice(p), v) for p, v in zip(df["time_period"], df["obs_value"]) if v == v]
     futuri = [q for q, _ in coppie if q.fine() > date.today()]
@@ -219,6 +230,13 @@ def storia_serie(r: dict, df: pd.DataFrame, finestra: int) -> Storia:
     coppie = _decenni(coppie) if proiezione else coppie[-finestra:]
     if len(coppie) < 3:
         raise ValueError("Servono almeno 3 periodi con dati per raccontare una serie")
+    if coppie[-1][0].freq == "M" and len(coppie) < 13 and numero_indice(r) and not r.get("_post_esistente"):
+        # per un indice dei prezzi la notizia è la variazione sull'anno prima: senza, meglio un altro dataset
+        # (es. la nuova base 2025 parte da gennaio 2026; la serie storica c'è in un altro dataset)
+        raise ValueError("indice mensile con meno di 13 mesi: manca il confronto con l'anno prima")
+    if coppie[-1][0].freq == "M" and len(coppie) < 13 and "nell'ultimo anno" in r.get("domanda", ""):
+        # serie mensile che non arriva a un anno (es. una nuova base): la domanda non può promettere l'anno
+        r = {**r, "domanda": r["domanda"].replace("nell'ultimo anno", "negli ultimi mesi")}
     dec, unita, sogg = r.get("decimali", 0), r.get("unita", ""), r["soggetto"]
     (a0, v0), (a1, v1), (ap, vp) = coppie[0], coppie[-1], coppie[-2]
     (amax, vmax), (amin, vmin) = max(coppie, key=lambda c: c[1]), min(coppie, key=lambda c: c[1])
@@ -255,7 +273,7 @@ def storia_serie(r: dict, df: pd.DataFrame, finestra: int) -> Storia:
 
     # paracadute: l'angolo più forte, scelto dal codice
     # "il più alto degli ultimi N anni" e non "mai così in alto dal 2016", che fa pensare a un 2016 più alto
-    arco = f"degli ultimi {len(coppie)} {'anni' if a1.freq == 'A' else 'periodi'}"
+    arco = f"degli ultimi {len(coppie)} {({'A': 'anni', 'Q': 'trimestri', 'M': 'mesi'}).get(a1.freq, 'periodi')}"
     if (a1, v1) == (amax, vmax):
         cop, ev, titolo, did = "ULTIMO", a1, f"Il più alto {arco}", f"{sogg} {a1.quando}: il valore più alto {arco}."
     elif (a1, v1) == (amin, vmin):
@@ -273,6 +291,33 @@ def storia_serie(r: dict, df: pd.DataFrame, finestra: int) -> Storia:
     scelte = {"copertina": cop, "evidenzia": ev.codice, "grafico": "colonne",
               "chiusura": ["ULTIMO", "VAR_PRIMO"] if "VAR_PRIMO" in menu else ["ULTIMO"]}
     testi = _testi_base(r, did, titolo, nota + ".", f"{sogg} {a1.quando}.", f"{a0.rispetto}.")
+    grafici = ("colonne", "linea") if ritmo else ("colonne", "linea", "area")
+
+    indice = numero_indice(r) and not ritmo
+    if indice:
+        # numeri indice: in copertina e in chiusura le variazioni, mai il livello; grafico a linea, perché
+        # le colonne partono da zero e 100 contro 105 sembrano uguali
+        chiave = "VAR_ANNO_PRIMA" if "VAR_ANNO_PRIMA" in menu else "VAR_PRIMO"
+        rif = Periodo.da_codice(a1.anno_prima()) if chiave == "VAR_ANNO_PRIMA" else a0
+        if chiave in menu:
+            var = menu[chiave]["testo"]
+            arco_var = "in un anno" if chiave == "VAR_ANNO_PRIMA" else f"{a0.da} {a1.al}"
+            scelte.update(copertina=chiave, evidenzia=a1.codice, grafico="linea",
+                          chiusura=[chiave, "VAR_PRECEDENTE"] if "VAR_PRECEDENTE" in menu else [chiave])
+            testi = _testi_base(r, f"{sogg} {a1.quando}: {var} {rif.rispetto}.", f"{var} {arco_var}",
+                                f"{_maiuscola(a1.quando)}: " + (f"{menu['VAR_PRECEDENTE']['testo']} {ap.rispetto}. "
+                                                                if "VAR_PRECEDENTE" in menu else "")
+                                + "Valori indice, non euro.", f"{rif.rispetto}.", f"{ap.rispetto}.")
+        grafici = ("linea",)
+    elif unita in ASSOLUTE and "DIFF_PRIMO" in menu:
+        # età e durate: il cambiamento si racconta in anni, non in percentuale
+        scelte["chiusura"] = ["ULTIMO", "DIFF_PRIMO"]
+        diff = _voce_diff("", v1 - vp, dec, unita)["testo"]
+        testi["nota_grafico"] = f"{_maiuscola(a1.quando)}: {menu['ULTIMO']['testo']}, {diff} {ap.rispetto}."
+        testi["post"] = f"{r['domanda']}\n\n{testi['didascalia_copertina']} {testi['nota_grafico']}"
+        if cop == "VAR_PRIMO":
+            scelte["copertina"] = "DIFF_PRIMO"
+            testi["titolo_grafico"] = f"{menu['DIFF_PRIMO']['testo']} {a0.da} {a1.al}"
 
     intervallo = f"{a0.breve}–{a1.breve}"
     occhiello = f"{r['occhiello']}, {intervallo}" + (" · stime ISTAT" if proiezione else "")
@@ -295,8 +340,7 @@ def storia_serie(r: dict, df: pd.DataFrame, finestra: int) -> Storia:
              "dati": _dati({r["soggetto"]: coppie}, dec, unita)}
     if not proiezione and (avviso := salto_insolito(coppie, tasso)):
         extra["da_controllare"] = [avviso]
-    return Storia("serie", menu, {q.codice: q.nome for q, _ in coppie},
-                  ("colonne", "linea") if ritmo else ("colonne", "linea", "area"),
+    return Storia("serie", menu, {q.codice: q.nome for q, _ in coppie}, grafici,
                   scelte, testi, tempo, occhiello, disegna, extra)
 
 
@@ -315,6 +359,17 @@ def storia_confronto(r: dict, df: pd.DataFrame, nomi: dict[str, str]) -> Storia:
     dec, unita, sogg = r.get("decimali", 0), r.get("unita", ""), r["soggetto"]
     nome = lambda c: nomi.get(c, c)  # noqa: E731
     cmax, cmin = ordine[0], ordine[-1]
+    # controllo di coerenza: se c'è il totale, le parti devono "contenerlo". Un tasso nazionale sta tra il
+    # minimo e il massimo delle aree; un conteggio è la loro somma. Se no manca qualcuno (es. il Mezzogiorno)
+    # e la classifica direbbe il falso.
+    if totale_cod:
+        tot, somma = valori[totale_cod], sum(parti.values())
+        margine = max(abs(tot) * 0.005, 0.05)
+        dentro = parti[cmin] - margine <= tot <= parti[cmax] + margine
+        sommato = tot and abs(somma / tot - 1) < 0.03
+        if not (dentro or sommato):
+            raise ValueError(f"classifica incompleta: il totale ({fmt_it(tot, dec)}) non è coerente con le "
+                             f"{len(parti)} categorie presenti, ne manca qualcuna")
     media = sum(parti.values()) / len(parti)
 
     menu = {

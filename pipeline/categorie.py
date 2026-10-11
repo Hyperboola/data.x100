@@ -27,6 +27,7 @@ def candidati(sottotema: str, cal: dict, istat: Istat | None = None) -> pd.DataF
     scelti = scelti.drop_duplicates("dataset")
     dataset = istat.dataset()[["id", "last_update"]]
     out = scelti.merge(dataset, left_on="dataset", right_on="id", how="inner")  # solo quelli scaricabili
+    out = out[~out["dataset"].str.upper().str.startswith("DF_BULK")]  # archivi in blocco: niente struttura SDMX
     return out.sort_values("last_update", ascending=False, na_position="last")[
         ["dataset", "titolo", "percorso", "last_update"]].reset_index(drop=True)
 

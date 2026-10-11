@@ -19,10 +19,13 @@
   --testo-chiaro: #D3D8DF;
 }
 * { box-sizing: border-box; margin: 0; }
-html, body { width: 1080px; height: 1440px; overflow: hidden; }
+html, body { width: {{ larghezza }}px; height: {{ altezza }}px; overflow: hidden; }
 body { font-family: "Instrument Sans", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
 
-.slide { width: 1080px; height: 1440px; padding: 88px 88px 72px; display: flex; flex-direction: column; }
+.slide { width: {{ larghezza }}px; height: {{ altezza }}px; padding: 88px 88px 72px; display: flex; flex-direction: column; }
+/* Reel 9:16: in alto c'è l'intestazione di Instagram, in basso nome, didascalia e pulsanti.
+   Il contenuto resta nella fascia centrale, che è anche il ritaglio 3:4 della griglia del profilo. */
+.slide.reel { padding: 260px 104px 360px; }
 .slide.scura { background: var(--inchiostro); color: var(--nebbia); }
 .slide.chiara { background: var(--nebbia); color: var(--inchiostro); }
 
@@ -38,7 +41,7 @@ body { font-family: "Instrument Sans", "Helvetica Neue", sans-serif; -webkit-fon
 {% block style %}{% endblock %}
 </style>
 </head>
-<body>
+<body class="{{ formato }}">
 {% block body %}{% endblock %}
 </body>
 </html>

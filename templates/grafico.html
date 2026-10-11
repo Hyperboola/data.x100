@@ -56,6 +56,7 @@
                  transform: translate(-50%, 50%); z-index: 2; }
 .linea-g .nodo.evidenza { width: 30px; height: 30px; background: var(--arancio); border: 5px solid var(--nebbia); }
 .linea-g .valore { position: absolute; transform: translateX(-50%); margin-bottom: 22px; }
+.linea-g .valore.sotto { margin-bottom: 0; transform: translate(-50%, calc(100% + 18px)); }
 .linea-g .rif { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--inchiostro); z-index: 1; }
 .linea-g .etichette { display: flex; gap: 12px; margin-top: 12px; }
 .linea-g .etichette div { flex: 1; text-align: center; font-family: "IBM Plex Mono", monospace; font-size: 20px; color: var(--grigio-nota); }
@@ -81,7 +82,7 @@
 .legenda-c .in-evidenza { font-weight: 600; }
 {% endblock %}
 {% block body %}
-<div class="slide chiara">
+<div class="slide chiara{{ ' reel' if formato == 'reel' }}">
   <div class="testata">
     <div class="occhiello mono">{{ occhiello }}</div>
     <div class="titolo">{{ titolo }}</div>
@@ -117,7 +118,7 @@
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{% if tracciato_area %}<polygon class="riempimento" points="{{ tracciato_area }}"/>{% endif %}<polyline points="{{ tracciato }}"/></svg>
         {% for b in barre %}{% if b.testo %}
         <div class="nodo{{ ' evidenza' if b.evidenzia }}" style="left: {{ b.x }}%; bottom: {{ b.pct }}%"></div>
-        {% if b.mostra %}<div class="valore" style="left: {{ b.x }}%; bottom: {{ b.pct }}%; font-size: {{ valore_px }}px">{{ b.testo }}</div>{% endif %}
+        {% if b.mostra %}<div class="valore{{ ' sotto' if b.sotto }}" style="left: {{ b.x }}%; bottom: {{ b.pct }}%; font-size: {{ valore_px }}px">{{ b.testo }}</div>{% endif %}
         {% endif %}{% endfor %}
       </div>
       <div class="etichette">{% for b in barre %}<div>{{ b.etichetta }}</div>{% endfor %}</div>

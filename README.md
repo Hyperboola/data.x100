@@ -20,7 +20,7 @@ indicato in `modello_claude` (default "haiku").
 ## La settimana tipo
 
 ```bash
-python -m pipeline.run --settimana      # domenica: prepara i 7 giorni successivi
+python -m pipeline.run --settimana      # sabato o domenica: prepara la settimana dopo (lun-dom)
 python -m pipeline.redazione            # scrivi, correggi, approva (si apre nel browser)
 ```
 
@@ -47,7 +47,11 @@ data_x100/
 
 ```bash
 python -m pipeline.run                         # i post di oggi
-python -m pipeline.run --settimana             # i post dei prossimi 7 giorni
+python -m pipeline.ricognizione                # una volta (la sera): legge tutti i dataset del calendario
+python -m pipeline.ricognizione --riepilogo    # quanti dataset freschi e mai usati ci sono, per sottotema
+python -m pipeline.run --settimana             # i post della prossima settimana (lun-dom), da qualunque giorno
+python -m pipeline.run --settimana --settimane 2   # le prossime due settimane
+python -m pipeline.run --settimana --rifai     # rifà anche i giorni già preparati
 python -m pipeline.redazione                   # la redazione nel browser
 python -m pipeline.run --giorno lunedi         # come se fosse lunedì
 python -m pipeline.run --serie nati_italia     # una serie preferita (--forza se il dato è vecchio)

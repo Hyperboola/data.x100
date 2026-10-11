@@ -24,7 +24,7 @@
 .piede .pagina { text-align: right; line-height: 1.5; }
 {% endblock %}
 {% block body %}
-<div class="slide scura">
+<div class="slide scura{{ ' reel' if formato == 'reel' }}">
   <div class="occhiello mono">In breve</div>
   <div class="centro">
     <div class="punti">

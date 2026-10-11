@@ -14,7 +14,7 @@ usa_claude = false
 modello_claude = "haiku"
 
 # Fasce di dati che il job può pubblicare: annuali, trimestrali, mensili
-slot = ["annuale", "trimestrale", "mensile"]
+slot = ["annuale", "mensile"]
 
 # Post al giorno (da 1 a 3). Con 1, le fasce si alternano: ogni giorno si parte da quella
 # pubblicata meno di recente, e se non trova niente si passa alla successiva.
@@ -55,13 +55,13 @@ tecnologia_internet = { storia = "serie", grafico = "colonne" }
 # Età massima dell'ultimo dato, in mesi dalla fine del periodo
 [freschezza]
 annuale = 24
-trimestrale = 7
-mensile = 4
+trimestrale = 8
+mensile = 6
 
 # Quanti periodi mostrare nel grafico (13 mesi e 12 trimestri includono l'anno prima)
 [finestra]
 annuale = 10
-trimestrale = 12
+trimestrale = 20
 mensile = 13
 
 # Temi mai scelti in automatico: richiedono una scelta editoriale umana
@@ -125,7 +125,8 @@ salute_stili_vita   = ["HEA_STYLE_SMOK", "HEA_STYLE_DRINK", "HEA_STYLE_BOMAS", "
 cibo                = ["HEA_STYLE_FOHAB", "AGR_CRP", "AGR_QUA", "AGR_PRICE"]
 
 [giorni.sabato]
-tema = "Il mondo ×100"
+# tema = "Il mondo ×100"
+tema = ""   # vuoto = pausa
 preferiti = true   # il sabato pubblica solo le serie di preferiti.toml (finché non c'è Eurostat)
 [giorni.sabato.sottotemi]
 italia_europa    = []   # arriverà con Eurostat

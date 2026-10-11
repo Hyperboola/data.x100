@@ -23,7 +23,7 @@
 {# Il numero si rimpicciolisce se è lungo, così resta sempre su una riga #}
 {% set n = numero | length %}
 {% set size = 196 if n <= 10 else (160 if n <= 13 else 128) %}
-<div class="slide scura">
+<div class="slide scura{{ ' reel' if formato == 'reel' }}">
   <div class="testata">
     <div class="logo">Data<span>%</span></div>
     <div class="occhiello mono">{{ occhiello }}</div>
@@ -38,7 +38,7 @@
   </div>
   <div class="piede">
     <div class="fonte">{{ fonte }}</div>
-    <div class="scorri">Scorri →</div>
+    {% if formato != "reel" %}<div class="scorri">Scorri →</div>{% endif %}
   </div>
 </div>
 {% endblock %}

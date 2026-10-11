@@ -17,6 +17,14 @@ from brand.theme import font_path
 from config import ROOT
 
 W, H = 1080, 1440  # 3:4, il formato più alto per i post e quello della griglia del profilo
+# I formati prodotti a ogni render: stesse slide, stessi dati, due tele.
+# Il reel è 9:16; i margini lasciano libere le zone coperte dall'interfaccia di Instagram
+# (nome e didascalia in basso, intestazione in alto) e tengono tutto dentro il ritaglio 3:4
+# che il profilo mostra in griglia.
+FORMATI = {
+    "post": {"larghezza": W, "altezza": H, "suffisso": ""},
+    "reel": {"larghezza": 1080, "altezza": 1920, "suffisso": "_reel"},
+}
 OUTPUT_DIR = ROOT / "output"
 TEMPLATES = ROOT / "templates"
 
@@ -43,6 +51,12 @@ def _etichetta(v: float, decimali: int, unita: str, forma: str) -> str:
             if abs(v) >= soglia:
                 return f"{fmt_it(v / soglia, 1)} {nome}"
     return f"{fmt_it(v, decimali)}{'' if unita in ('', '%') else ' '}{unita}"
+
+
+def _avvallamento(valori: list, i: int) -> bool:
+    """True se il punto i è più basso di tutti i suoi vicini con un valore."""
+    vicini = [valori[j] for j in (i - 1, i + 1) if 0 <= j < len(valori) and _valid(valori[j])]
+    return bool(vicini) and all(v > valori[i] for v in vicini)
 
 
 def grafico(
@@ -113,6 +127,9 @@ def grafico(
                 "x": round((i + 0.5) / n * 100, 2),  # centro della colonna: allinea punti ed etichette
                 "evidenzia": i == evidenzia,
                 "mostra": i in mostra,
+                # sulla linea, un punto più basso dei vicini ha la linea che gli scende addosso da sopra:
+                # il suo valore va scritto sotto, se no la linea lo attraversa
+                "sotto": forma in ("linea", "area") and ok and _avvallamento(valori, i),
             }
         )
 
@@ -131,7 +148,8 @@ def grafico(
     else:
         altezza = 0
         # La dimensione dei valori dipende da quanto è larga una colonna e da quanto sono lunghi i numeri
-        larghezza_col = (W - 2 * 88 - 12 * (n - 1)) / n
+        # 104: il margine più largo tra post e reel, così i valori stanno in entrambi i formati
+        larghezza_col = (W - 2 * 104 - 12 * (n - 1)) / n
         piu_lungo = max(len(b["testo"]) for b in barre if b["mostra"]) or 1
         valore_px = int(min(36, larghezza_col / (0.62 * piu_lungo)))
         if valore_px < 20:  # non ci stanno tutti: solo primo, ultimo ed evidenziato, più grandi
@@ -214,11 +232,11 @@ def chiusura(*, punti: list[dict], invito: str, pagina: str, avviso: str = "") -
 
 
 # --- Render ------------------------------------------------------------------------------
-_CHECK_JS = """() => {
+_CHECK_JS = """([larghezza, altezza]) => {
   const problemi = [];
   for (const el of document.querySelectorAll('.slide *')) {
     const r = el.getBoundingClientRect();
-    if (r.width && (r.right > 1080.5 || r.bottom > 1440.5)) problemi.push(el.className || el.tagName);
+    if (r.width && (r.right > larghezza + .5 || r.bottom > altezza + .5)) problemi.push(el.className || el.tagName);
   }
   const g = document.querySelector('.grafico');
   if (g && g.clientHeight < 360) problemi.push('grafico troppo schiacciato: accorcia titolo o nota');
@@ -233,8 +251,13 @@ _CHECK_JS = """() => {
 
 
 def render(slides: list[tuple[str, dict]], nome: str, out_dir: Path = OUTPUT_DIR,
-           salva_html: bool = False) -> list[Path]:
-    """Trasforma una lista di slide in JPEG 1080×1440 (nome_1.jpg, nome_2.jpg, ...).
+           salva_html: bool = False, formati: tuple[str, ...] = ("post", "reel")) -> list[Path]:
+    """Trasforma una lista di slide in JPEG, in ogni formato richiesto.
+
+    post: 1080×1440 -> nome_1.jpg, nome_2.jpg, ...
+    reel: 1080×1920 -> nome_reel_1.jpg, nome_reel_2.jpg, ...
+    Le slide sono le stesse (stessi dati, stessi testi): cambia solo la tela, quindi ogni
+    rigenerazione dalla redazione aggiorna insieme post e reel.
 
     L'HTML intermedio vive in una cartella temporanea e sparisce a fine render
     (con salva_html=True resta accanto ai JPEG, utile per ritoccare il CSS).
@@ -254,18 +277,26 @@ def render(slides: list[tuple[str, dict]], nome: str, out_dir: Path = OUTPUT_DIR
     paths = []
     with tempfile.TemporaryDirectory() as temporanea, sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
-        for i, (template, dati) in enumerate(slides, start=1):
-            html_path = (out_dir if salva_html else Path(temporanea)) / f"{nome}_{i}.html"
-            html_path.write_text(_env.get_template(template).render(**common, **dati), encoding="utf-8")
-            page.goto(html_path.as_uri())
-            page.evaluate("document.fonts.ready.then(() => true)")
-            problemi = page.evaluate(_CHECK_JS)
-            if problemi:
-                browser.close()
-                raise ValueError(f"Slide {i} ({template}) non sta nei bordi: {sorted(set(problemi))}")
-            jpg = out_dir / f"{nome}_{i}.jpg"
-            page.screenshot(path=str(jpg), type="jpeg", quality=95)
-            paths.append(jpg)
-        browser.close()
+        try:
+            for formato in formati:
+                f = FORMATI[formato]
+                page = browser.new_page(viewport={"width": f["larghezza"], "height": f["altezza"]},
+                                        device_scale_factor=1)
+                for i, (template, dati) in enumerate(slides, start=1):
+                    base = f"{nome}{f['suffisso']}_{i}"
+                    html_path = (out_dir if salva_html else Path(temporanea)) / f"{base}.html"
+                    html = _env.get_template(template).render(**common, **dati, formato=formato,
+                                                              larghezza=f["larghezza"], altezza=f["altezza"])
+                    html_path.write_text(html, encoding="utf-8")
+                    page.goto(html_path.as_uri())
+                    page.evaluate("document.fonts.ready.then(() => true)")
+                    problemi = page.evaluate(_CHECK_JS, [f["larghezza"], f["altezza"]])
+                    if problemi:
+                        raise ValueError(f"Slide {i} ({template}, {formato}) non sta nei bordi: {sorted(set(problemi))}")
+                    jpg = out_dir / f"{base}.jpg"
+                    page.screenshot(path=str(jpg), type="jpeg", quality=95)
+                    paths.append(jpg)
+                page.close()
+        finally:
+            browser.close()
     return paths

@@ -28,7 +28,7 @@
 .grande-logo { font-size: 260px; line-height: .8; letter-spacing: -10px; }
 {% endblock %}
 {% block body %}
-<div class="slide {{ 'chiara' if tipo == 'punti' else 'scura' }}{{ ' calendario' if tipo == 'calendario' else '' }}">
+<div class="slide {{ 'chiara' if tipo == 'punti' else 'scura' }}{{ ' calendario' if tipo == 'calendario' else '' }}{{ ' reel' if formato == 'reel' }}">
   <div class="testata">
     <div class="logo">Data<span>%</span></div>
     <div class="occhiello mono">{{ occhiello }}</div>

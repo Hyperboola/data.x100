@@ -27,7 +27,8 @@ MAX_CANDIDATI = 12   # dataset proposti a Claude (già ordinati dal codice)
 TECNICI = ("base ", "pesi", "ponderazion", "deflator", "destagionalizzat", "concatenat", "metadat",
            "contributi alla", "ricostruit", "archivio", "valori a prezzi", "classificazione", "versione")
 MEMORIA = RAW_DIR / "istat" / "freschezza.json"  # ultimo periodo noto di ogni dataset, per frequenza
-MEMORIA_GIORNI = 30
+MEMORIA_GIORNI = 30      # "ultimo dato del 2025": può cambiare a ogni nuova pubblicazione ISTAT
+MEMORIA_STRUTTURA = 180  # "nessun dato mensile in questo dataset": cambia raramente
 MINUTI_SCELTA = 5    # tempo massimo per trovare un dataset buono in una chiamata
 MAX_CODICI = 40      # codici mostrati per ogni dimensione
 TOTALI = {"IT", "9", "T", "TOTAL", "99", "ALL", "TOT"}
@@ -93,20 +94,26 @@ def scegli(sottotema: str, frequenza: str, cal: dict, esclusi: set[str], istat: 
             codici, meta = istat.struttura(flow)
             serie = istat.serie_disponibili(flow, filtri_ricognizione(codici, frequenza))
         except NessunDato:  # nessuna serie di questa frequenza (o per l'Italia): non è lento, è vuoto
-            _ricorda(memoria, flow, pd.DataFrame({"time_period": []}), frequenza)
+            _ricorda(memoria, flow, pd.DataFrame({"time_period": []}))  # vuoto per tutte le frequenze
             continue
         except FonteNonDisponibile as exc:  # ISTAT ha un guasto: oggi si salta, ma non è colpa del dataset
             log.info("%s/%s: ISTAT non risponde per %s, lo salto per oggi (%s)", sottotema, frequenza, flow,
                      str(exc)[:80])
             continue
         except Exception as exc:
-            if "timed out" in str(exc).lower():  # davvero troppo pesante: si salta per 30 giorni
-                log.info("%s/%s: %s troppo lento, lo salto per 30 giorni", sottotema, frequenza, flow)
+            if "timed out" in str(exc).lower():
+                if _timeout(memoria, flow):  # già successo un altro giorno: davvero troppo pesante
+                    log.info("%s/%s: %s di nuovo troppo lento, lo salto per 30 giorni", sottotema, frequenza, flow)
+                else:  # forse è solo ISTAT sovraccarico in questo momento: si riprova un altro giorno
+                    log.info("%s/%s: %s non ha risposto in tempo, lo salto per oggi", sottotema, frequenza, flow)
+            elif isinstance(exc, (KeyError, ValueError)):  # struttura illeggibile: inutile riprovarlo domani
+                log.info("%s/%s: %s ha una struttura che non so leggere, lo salto per 30 giorni", sottotema,
+                         frequenza, flow)
                 _segna_lento(memoria, flow)
             else:
                 log.info("%s/%s: %s non raggiungibile (%s)", sottotema, frequenza, flow, str(exc)[:120])
             continue
-        _ricorda(memoria, flow, serie, frequenza)
+        _ricorda(memoria, flow, serie)  # vale per tutte le fasce
         fresche = serie_fresche(serie, frequenza, soglia)
         if not fresche.empty:
             break
@@ -178,17 +185,46 @@ def _ricorda(memoria: dict, flow: str, serie, frequenza: str | None = None) -> N
     MEMORIA.write_text(json.dumps(memoria, indent=1))
 
 
+def _eta_memoria(m: dict) -> int:
+    return (date.today() - date.fromisoformat(m.get("verificato", "2000-01-01"))).days
+
+
 def _noto_vecchio(memoria: dict, flow: str, frequenza: str, soglia: int) -> bool:
-    """True se sappiamo già (da meno di 30 giorni) che il dataset non serve: troppo lento per ISTAT,
-    oppure senza serie fresche di quella frequenza."""
+    """True se sappiamo già che il dataset non serve per questa frequenza:
+    - troppo lento per ISTAT (per 30 giorni);
+    - non ha proprio dati di questa frequenza (per 180 giorni: è una caratteristica del dataset);
+    - li ha, ma l'ultimo è troppo vecchio (per 30 giorni: può arrivare un aggiornamento)."""
     m = memoria.get(flow)
-    if not m or (date.today() - date.fromisoformat(m["verificato"])).days > MEMORIA_GIORNI:
+    if not m:
         return False
+    eta = _eta_memoria(m)
     if m.get("lento"):
-        return True
-    if frequenza not in m.get("controllate", ["annuale", "trimestrale", "mensile"]):
+        return eta <= MEMORIA_GIORNI
+    if frequenza not in m.get("controllate", []):
         return False  # questa frequenza non è ancora stata controllata
-    return frequenza not in m or Periodo.da_codice(m[frequenza]).eta_mesi() > soglia
+    if frequenza not in m:
+        return eta <= MEMORIA_STRUTTURA
+    return eta <= MEMORIA_GIORNI and Periodo.da_codice(m[frequenza]).eta_mesi() > soglia
+
+
+def _noto_fresco(memoria: dict, flow: str, frequenza: str, soglia: int) -> bool:
+    """True se sappiamo (da meno di 30 giorni) che il dataset ha dati freschi di questa frequenza."""
+    m = memoria.get(flow) or {}
+    return (not m.get("lento") and frequenza in m and _eta_memoria(m) <= MEMORIA_GIORNI
+            and Periodo.da_codice(m[frequenza]).eta_mesi() <= soglia)
+
+
+def _timeout(memoria: dict, flow: str) -> bool:
+    """Registra un timeout. True (e dataset segnato lento per 30 giorni) se ne aveva già avuto uno in un altro
+    giorno: un timeout isolato di solito è ISTAT sovraccarico, non il dataset."""
+    m, oggi = memoria.get(flow, {}), date.today().isoformat()
+    if m.get("timeout") and m["timeout"] != oggi:
+        _segna_lento(memoria, flow)
+        return True
+    memoria[flow] = {"verificato": "2000-01-01", **m, "timeout": oggi}  # senza verifica valida: si riprova
+    MEMORIA.parent.mkdir(parents=True, exist_ok=True)
+    MEMORIA.write_text(json.dumps(memoria, indent=1))
+    return False
 
 
 def _segna_lento(memoria: dict, flow: str) -> None:
@@ -199,14 +235,17 @@ def _segna_lento(memoria: dict, flow: str) -> None:
 
 
 def filtri_ricognizione(codici, frequenza: str) -> dict:
-    """Per controllare la freschezza basta poco: la frequenza del giorno e, se c'è un territorio,
-    l'Italia con le sue macro-aree. Così anche i dataset per comune rispondono in pochi secondi."""
+    """Per controllare la freschezza basta poco: se c'è un territorio, l'Italia con le sue macro-aree.
+    Così anche i dataset per comune rispondono in pochi secondi. Niente filtro sulla frequenza:
+    con una sola richiesta si sa se il dataset ha dati freschi annuali, trimestrali e mensili, e la
+    risposta (in cache) serve a tutte le fasce. Le serie della frequenza giusta le sceglie serie_fresche."""
     dims = set(codici["dimension"])
-    filtri = {"FREQ": FREQ_CODICE[frequenza]} if "FREQ" in dims else {}
+    filtri = {}
     territorio = next((d for d in sorted(dims) if any(k in d.upper() for k in ("REF_AREA", "TERR", "AREA"))), None)
     if territorio:
-        presenti = list(codici.loc[codici["dimension"] == territorio, "code"])
-        aree = [c for c in presenti if c.upper() == "IT" or (len(c) == 3 and c.upper().startswith("IT"))]
+        righe = codici[codici["dimension"] == territorio]
+        aree = [c for c, n in zip(righe["code"], righe["name"])
+                if c.upper() == "IT" or (len(c) == 3 and c.upper().startswith("IT")) or _ripartizione(n)]
         if aree:
             filtri[territorio] = aree
     return filtri
@@ -311,7 +350,10 @@ def _unita_da_nomi(testo: str) -> str:
 
 
 # --- Senza Claude: dataset e serie scelti con regole ---------------------------------------------
-PAROLE_TOTALE = ("total", "tutte", "tutti", "complesso", "mondo", "world")
+PAROLE_TOTALE = ("total", "tutte", "tutti", "complesso", "mondo", "world", "indice generale")
+# Dimensioni che descrivono COSA si misura (indicatore, unità, base): il codice scelto lì è già nel soggetto.
+# In tutte le altre, se non si sceglie il totale, la serie è solo una parte e il soggetto deve dirlo.
+DESCRITTIVE = ("FREQ", "DATA_TYPE", "INDICATOR", "MEASURE", "TIPO_DATO", "UNIT", "BASE", "TIPO_IND")
 # Nomi da mostrare in alto nelle slide, sottotema per sottotema
 NOMI_SOTTOTEMI = {
     "prezzi": "Prezzi", "stipendi_redditi": "Stipendi e redditi", "risparmio_debiti": "Risparmi e debiti",
@@ -341,6 +383,31 @@ def _taglia(testo: str, massimo: int) -> str:
     return testo[:massimo].rsplit(" ", 1)[0].rstrip(" -:,") + "…"
 
 
+PAROLE_FREQUENZA = {"mensile": ("mensil",), "trimestrale": ("trimestral",),
+                    "annuale": ("annual", "annui", "annue", "per anno")}
+
+
+def _distanza_frequenza(titolo: str, frequenza: str) -> int:
+    """0: il titolo dice la frequenza cercata · 1: non dice niente · 2: dice un'altra frequenza."""
+    if any(p in titolo for p in PAROLE_FREQUENZA[frequenza]):
+        return 0
+    altre = (p for f, parole in PAROLE_FREQUENZA.items() if f != frequenza for p in parole)
+    return 2 if any(p in titolo for p in altre) else 1
+
+
+def fascia_esaurita(sottotema: str, frequenza: str, cal: dict, istat: Istat | None = None,
+                    minimo: int = 12) -> int:
+    """Quanti dataset del sottotema sappiamo già essere senza dati freschi di questa frequenza, se nessuno di
+    quelli conosciuti ne ha e se sono abbastanza da fidarsi (almeno `minimo`, o tutti): es. le nascite, che
+    ISTAT pubblica solo annuali. 0 se vale la pena cercare."""
+    memoria, soglia = _memoria(), cal["freschezza"][frequenza]
+    flows = list(candidati(sottotema, cal, istat or Istat())["dataset"])
+    if any(_noto_fresco(memoria, f, frequenza, soglia) for f in flows):
+        return 0
+    vecchi = sum(_noto_vecchio(memoria, f, frequenza, soglia) for f in flows)
+    return vecchi if flows and (vecchi >= minimo or vecchi == len(flows)) else 0
+
+
 def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[str],
                         istat: Istat | None = None, **_) -> dict:
     """Come scegli(), ma senza nessuna chiamata a Claude.
@@ -358,33 +425,50 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
     c = c[~c["dataset"].isin(esclusi) & ~c["dataset"].map(lambda f: _noto_vecchio(memoria, f, frequenza, soglia))]
     if c.empty:
         raise DatasetEsauriti(f"nessun dataset nuovo e potenzialmente fresco per {sottotema}")
-    tecnico = c["titolo"].fillna("").str.lower().map(lambda t: any(p in t for p in TECNICI))
-    c = c.assign(_tecnico=tecnico).sort_values(["_tecnico", "last_update"], ascending=[True, False],
-                                               na_position="last").head(8)
-    provati = set()
-    for riga in c.itertuples():
+    titoli = c["titolo"].fillna("").str.lower()
+    tecnico = titoli.map(lambda t: any(p in t for p in TECNICI))
+    # prima i dataset che nel titolo dicono la frequenza cercata, in fondo quelli che ne dicono un'altra
+    # ("Tasso di disoccupazione - dati mensili" non serve quando si cercano dati annuali)
+    c = c.assign(_tecnico=tecnico, _frequenza=titoli.map(lambda t: _distanza_frequenza(t, frequenza)))
+    c = c.sort_values(["_tecnico", "_frequenza", "last_update"], ascending=[True, True, False],
+                      na_position="last").head(8)
+    provati, di_fila = set(), 0  # di_fila: timeout consecutivi
+    for n, riga in enumerate(c.itertuples(), start=1):
         flow = riga.dataset
         provati.add(flow)
         if time.monotonic() > scadenza:
             raise SerieNonValida(f"tempo esaurito dopo {MINUTI_SCELTA} minuti: riprovo con il prossimo giro", provati)
+        log.info("%s/%s: controllo %s (%s/%s) · %s", sottotema, frequenza, flow, n, len(c), _taglia(str(riga.titolo), 60))
         try:
             codici, meta = istat.struttura(flow)
             serie = istat.serie_disponibili(flow, filtri_ricognizione(codici, frequenza))
         except NessunDato:  # nessuna serie di questa frequenza (o per l'Italia): non è lento, è vuoto
-            _ricorda(memoria, flow, pd.DataFrame({"time_period": []}), frequenza)
+            _ricorda(memoria, flow, pd.DataFrame({"time_period": []}))  # vuoto per tutte le frequenze
             continue
         except FonteNonDisponibile as exc:  # ISTAT ha un guasto: oggi si salta, ma non è colpa del dataset
             log.info("%s/%s: ISTAT non risponde per %s, lo salto per oggi (%s)", sottotema, frequenza, flow,
                      str(exc)[:80])
             continue
         except Exception as exc:
-            if "timed out" in str(exc).lower():  # davvero troppo pesante: si salta per 30 giorni
-                log.info("%s/%s: %s troppo lento, lo salto per 30 giorni", sottotema, frequenza, flow)
+            if "timed out" in str(exc).lower():
+                if _timeout(memoria, flow):  # già successo un altro giorno: davvero troppo pesante
+                    log.info("%s/%s: %s di nuovo troppo lento, lo salto per 30 giorni", sottotema, frequenza, flow)
+                else:  # forse è solo ISTAT sovraccarico in questo momento: si riprova un altro giorno
+                    log.info("%s/%s: %s non ha risposto in tempo, lo salto per oggi", sottotema, frequenza, flow)
+                di_fila += 1
+                if di_fila >= 3:  # tre di fila: è ISTAT a essere lento, non i dataset
+                    log.info("ISTAT sembra sovraccarico: pausa di 2 minuti prima di continuare")
+                    time.sleep(120)
+                    di_fila = 0
+            elif isinstance(exc, (KeyError, ValueError)):  # struttura illeggibile: inutile riprovarlo domani
+                log.info("%s/%s: %s ha una struttura che non so leggere, lo salto per 30 giorni", sottotema,
+                         frequenza, flow)
                 _segna_lento(memoria, flow)
             else:
                 log.info("%s/%s: %s non raggiungibile (%s)", sottotema, frequenza, flow, str(exc)[:120])
             continue
-        _ricorda(memoria, flow, serie, frequenza)
+        di_fila = 0
+        _ricorda(memoria, flow, serie)  # vale per tutte le fasce
         fresche = serie_fresche(serie, frequenza, soglia)
         if fresche.empty:
             continue
@@ -395,6 +479,14 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
             continue
         filtri, variabile, nomi_scelti = scelta
         soggetto, unita = _soggetto_unita(codici, filtri, titolo)
+        breve = soggetto
+        if len(soggetto) > 55 and ": " in soggetto:
+            # "Persone di 6 anni e più per spettacoli a cui...: siti archeologici e monumenti": il titolo usa
+            # la parte specifica, la spiegazione completa resta nel testo come "(...)"
+            generale, breve = soggetto.rsplit(": ", 1)
+            soggetto = f"{generale} ({breve})"
+        if parte := [p for p in nomi_scelti.get("parte", []) if p and p.lower() not in soggetto.lower()]:
+            soggetto = f"{soggetto} ({', '.join(x[:1].lower() + x[1:] if x[1:2].islower() else x for x in parte)})"
         luogo = "Italia" if variabile else nomi_scelti.get("territorio", "Italia")
         # fonte breve: il nome più chiaro tra categoria e dataset, senza ripetizioni, su una o due righe
         if categoria.lower() in titolo.lower() or titolo.lower().startswith(categoria.lower()[:20]):
@@ -407,8 +499,13 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
         # i conteggi ("arrivi", "nati") hanno come unità la cosa contata: "9,06 mln arrivi"
         if not unita and len(soggetto.split()) <= 2 and not any(p in soggetto.lower() for p in NON_CONTEGGI):
             unita = soggetto
-        zona = "regione" if variabile and filtri.get(variabile, [None])[-1:] and len(filtri[variabile][-1]) == 4 else "area"
-        Sogg = soggetto[:1].upper() + soggetto[1:]
+        aree_scelte = filtri.get(variabile, []) if variabile else []
+        nome_area = lambda c: dict(zip(codici["code"], codici["name"])).get(c, "")  # noqa: E731
+        zona = "area" if any(_ripartizione(nome_area(c)) for c in aree_scelte) else "regione"
+        if breve != soggetto and not parte:
+            Sogg = breve[:1].upper() + breve[1:]
+        else:
+            Sogg = soggetto[:1].upper() + soggetto[1:]
         log.info("%s/%s: scelto senza Claude %s (%s)", sottotema, frequenza, flow, titolo)
         return {
             "id": f"{flow}|{slug_filtri(filtri)}", "sottotema": sottotema, "frequenza": frequenza, "flow": flow,
@@ -417,6 +514,7 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
             "occhiello": f"{NOMI_SOTTOTEMI.get(sottotema, _taglia(categoria, 24))} · {luogo}",
             "soggetto": soggetto, "unita": unita, "decimali": None,
             "domanda": (f"{Sogg}: quale {zona} è in testa?" if variabile
+                        else f"{Sogg}: com'è andata nell'ultimo anno?" if frequenza == "mensile"
                         else f"{Sogg}: com'è andata negli ultimi anni?"),
             "fonte_testo": f"ISTAT, {fonte}", "motivo": "scelto con regole (Claude spento)",
         }
@@ -452,6 +550,9 @@ def scegli_codici(fresche, codici, frequenza: str, titolo: str, pref: dict):
         else:  # es. l'indicatore: quello il cui nome somiglia di più al titolo del dataset
             somiglianza = lambda c: len(parole_titolo & set(nomi.get((d, c), "").lower().split()))  # noqa: E731
             scelto = max(presenti, key=somiglianza)
+            if not e_territorio and len(presenti) > 1 and not any(k in d.upper() for k in DESCRITTIVE):
+                # una sola voce tra tante (es. un prodotto del paniere): va detto nel soggetto
+                utili.setdefault("parte", []).append(pulisci_soggetto(nomi.get((d, scelto), scelto)))
         righe = righe[righe[d] == scelto]
         filtri[d.upper()] = scelto
         if d == territorio and scelto.upper().startswith("IT") and scelto.upper() not in ("IT", "ITALIA"):
@@ -466,8 +567,10 @@ def scegli_codici(fresche, codici, frequenza: str, titolo: str, pref: dict):
         nome_di = lambda c: nomi.get((variabile, c), "")  # noqa: E731
         if any("trentino" in nome_di(c).lower() for c in regioni):
             regioni = [c for c in regioni if "provincia autonoma" not in nome_di(c).lower()]
-        # o tutte le macro-aree o tutte le regioni: una classifica parziale direbbe il falso
-        aree = macro if len(macro) >= 3 else (regioni if len(regioni) <= 21 else [])
+        regioni = [c for c in regioni if not _ripartizione(nome_di(c))]  # "ITFG" Mezzogiorno non è una regione
+        # o una suddivisione completa dell'Italia o niente: una classifica parziale direbbe il falso
+        # (es. Nord-ovest, Nord-est e Centro senza il Mezzogiorno: il Centro risulterebbe "primo")
+        aree = _suddivisione_completa(presenti, nome_di) or (regioni if 20 <= len(regioni) <= 21 else [])
         if len(aree) >= 2:
             filtri[variabile.upper()] = italia[:1] + aree
         else:  # niente dettaglio territoriale: si torna a una serie per l'Italia
@@ -476,14 +579,66 @@ def scegli_codici(fresche, codici, frequenza: str, titolo: str, pref: dict):
     return filtri, (variabile.upper() if variabile else None), utili
 
 
+# Le suddivisioni dell'Italia per ripartizione usate da ISTAT, dalla più dettagliata. I codici cambiano
+# tra un dataset e l'altro (ITD o ITH per il Nord-est, ITFG per il Mezzogiorno...), i nomi no.
+SUDDIVISIONI = (
+    ("nordovest", "nordest", "centro", "sud", "isole"),
+    ("nordovest", "nordest", "centro", "mezzogiorno"),
+    ("nord", "centro", "mezzogiorno"),
+)
+_RIPARTIZIONI = {n for s in SUDDIVISIONI for n in s}
+
+
+def _chiave_area(nome: str) -> str:
+    """'Nord-ovest' → 'nordovest'; 'Isole (Sicilia e Sardegna)' → 'isole'."""
+    return re.sub(r"[^a-z]", "", str(nome).split("(")[0].lower())
+
+
+def _ripartizione(nome: str) -> bool:
+    return _chiave_area(nome) in _RIPARTIZIONI
+
+
+def _suddivisione_completa(codici_presenti, nome_di) -> list[str]:
+    """I codici di una suddivisione completa dell'Italia, se tra i presenti ce n'è una."""
+    per_nome = {}
+    for c in codici_presenti:
+        per_nome.setdefault(_chiave_area(nome_di(c)), c)
+    for suddivisione in SUDDIVISIONI:
+        if all(n in per_nome for n in suddivisione):
+            return [per_nome[n] for n in suddivisione]
+    return []
+
+
+# Indicatori che ISTAT esprime in percentuale anche quando il nome non lo dice
+PERCENTUALI = re.compile(r"^(tasso|tassi) di (occupazione|disoccupazione|inattivit|attivit|abbandono|"
+                         r"povert|deprivazion|risparmio|partecipazione|scolarizzazione|copertura)|^quota d|"
+                         r"^incidenza d|^percentuale d|^propensione al risparmio")
+_RUMORE = (re.compile(r"\s*\((base\s*)?\d{4}\s*=\s*100\)", re.I),          # "(base 2025=100)"
+           re.compile(r"\s*\(base \d{4}\)", re.I),                            # "(base 2025)"
+           re.compile(r"\s*[-–]\s*dati (mensili|trimestrali|annuali)\b.*$", re.I),  # "- dati mensili"
+           re.compile(r"\s*[-–]\s*(mensili|trimestrali|annuali)\b.*$", re.I))
+
+
+def pulisci_soggetto(testo: str) -> str:
+    """Via le note tecniche dei nomi ISTAT: 'Indice ... (base 2025=100) - dati mensili' → 'Indice ...'."""
+    for r in _RUMORE:
+        testo = r.sub("", testo)
+    return testo.strip(" -–:,")
+
+
 def _soggetto_unita(codici, filtri: dict, titolo: str) -> tuple[str, str]:
     """Il soggetto è il nome dell'indicatore scelto (o il titolo); l'unità si deduce dai nomi."""
     nomi = {(d, c): n for d, c, n in codici[["dimension", "code", "name"]].itertuples(index=False)}
     indicatore = next((nomi.get((d, c)) for d, c in filtri.items()
                        if d in ("DATA_TYPE", "INDICATOR", "MEASURE", "TIPO_DATO") and isinstance(c, str)), None)
-    soggetto = (indicatore or titolo).strip()
+    soggetto = pulisci_soggetto((indicatore or titolo).strip()) or (indicatore or titolo).strip()
     tutti = (" ".join(str(nomi.get((d, c), "")) for d, c in filtri.items() if isinstance(c, str)) + " " + titolo).lower()
     unita = _unita_da_nomi(tutti)
+    basso = soggetto.lower()
+    if not unita and PERCENTUALI.search(basso):
+        unita = "%"
+    elif not unita and basso.startswith(("età media", "eta media", "età mediana", "speranza di vita", "durata media")):
+        unita = "anni"
     if len(soggetto) > 1 and soggetto[1].islower():  # "Nati vivi" → "nati vivi", ma "PIL" resta "PIL"
         soggetto = soggetto[:1].lower() + soggetto[1:]
     return soggetto, unita

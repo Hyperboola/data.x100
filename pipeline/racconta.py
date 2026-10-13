@@ -554,27 +554,22 @@ def _testi_base(r: dict, didascalia: str, titolo: str, nota: str, punto_1: str, 
 
 
 # --- Carosello -------------------------------------------------------------------------------------
-# Stili delle copertine: (cosa c'è in copertina, sfondo della copertina, sfondo della 2ª slide).
+# Stili delle copertine, a rotazione: (cosa c'è in copertina, sfondo della copertina, sfondo della 2ª slide).
 # Con il grafico in copertina, la 2ª slide è il numero grande; con il numero in copertina, è il grafico.
 STILI = {
     "numero_scuro":   ("numero", "scura", "chiara"),
     "grafico_chiaro": ("grafico", "chiara", "scura"),
-    "grafico_scuro":  ("grafico", "scura", "chiara"),
+    "numero_arancio": ("numero", "arancio", "chiara"),
     "numero_chiaro":  ("numero", "chiara", "scura"),
-    "numero_arancio": ("numero", "arancio", "chiara"),  # riservato al sabato
+    "grafico_scuro":  ("grafico", "scura", "chiara"),
 }
-# Dal lunedì al venerdì, in quest'ordine: la copertina alterna sempre sfondo scuro e chiaro.
-# Con 4 stili e 5 post a settimana la sequenza scala di un giorno ogni settimana. L'arancione è per il sabato.
-ROTAZIONE = ("numero_scuro", "grafico_chiaro", "grafico_scuro", "numero_chiaro")
 GRAFICI_SU_SCURO = ("linea", "area", "colonne", "barre", "orizzontale")  # colori pensati per lo sfondo scuro
 
 
 def scegli_stile(precedenti: dict, ammessi: tuple, preferito: str) -> tuple[str, str]:
     """(stile, grafico): lo stile dopo l'ultimo usato; se mette il grafico in copertina, un tipo di grafico
     diverso dall'ultima copertina con grafico. Se i dati non lo permettono si passa allo stile successivo."""
-    if precedenti.get("sabato"):  # il sabato ha la sua copertina, fuori dalla rotazione
-        return "numero_arancio", preferito
-    nomi = list(ROTAZIONE)
+    nomi = list(STILI)
     dopo = (nomi.index(precedenti["stile"]) + 1) if precedenti.get("stile") in nomi else 0
     for stile in nomi[dopo:] + nomi[:dopo]:
         cosa, sfondo_cop, sfondo_2 = STILI[stile]

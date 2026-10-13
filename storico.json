@@ -162,6 +162,7 @@
     "numero": "32,3 per 100 persone",
     "domanda": "Quasi una persona su tre ha visitato siti archeologici e monumenti",
     "titolo": "Dal crollo del 2021 al record",
-    "da_controllare": []
+    "da_controllare": [],
+    "stile": "numero_chiaro"
   }
 ]

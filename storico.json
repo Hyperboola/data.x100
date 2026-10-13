@@ -109,7 +109,8 @@
     "numero": "32,6 anni",
     "domanda": "In Italia si diventa mamme sempre più tardi",
     "titolo": "Ogni anno un po' più tardi",
-    "da_controllare": []
+    "da_controllare": [],
+    "stile": "grafico_chiaro"
   },
   {
     "data": "2026-10-15",
@@ -133,7 +134,8 @@
     "numero": "9,6 per 100 famiglie",
     "domanda": "Nel 2021 quasi una famiglia su 10 pensava di cambiare casa",
     "titolo": "Il picco nel 2021, poi su e giù",
-    "da_controllare": []
+    "da_controllare": [],
+    "stile": "numero_arancio"
   },
   {
     "data": "2026-10-16",

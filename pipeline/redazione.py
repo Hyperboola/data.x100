@@ -45,8 +45,8 @@ LIMITI = {campo: n for g in GRUPPI.values() for campo, n in g.items()}
 ETICHETTE_SERIE = {"occhiello": "Occhiello (in alto nelle slide)", "unita": "Unità di misura (es. %, €, anni, per 100 famiglie)",
                    "fonte_testo": "Fonte (in fondo alle slide)"}
 NOMI_STILI = {"numero_scuro": "Numero · sfondo scuro", "grafico_chiaro": "Grafico · sfondo chiaro",
-              "numero_arancio": "Numero · sfondo arancione", "numero_chiaro": "Numero · sfondo chiaro",
-              "grafico_scuro": "Grafico · sfondo scuro"}
+              "grafico_scuro": "Grafico · sfondo scuro",
+              "numero_chiaro": "Numero · sfondo chiaro", "numero_arancio": "Numero · sfondo arancione (sabato)"}
 NOMI_GRAFICI = {"colonne": "Colonne", "linea": "Linea", "area": "Area", "barre": "Barre (classifica)",
                 "ciambella": "Ciambella (parti di un totale)", "linee": "Più linee", "indice": "Linee in indice (base 100)",
                 "variazioni": "Barre delle variazioni"}
@@ -172,7 +172,7 @@ def rigenera(path: Path, testi_nuovi: dict, grafico: str | None = None, serie_nu
                             {"quando": datetime.now().isoformat(timespec="seconds"), "correzioni": correzioni}])
     _scrivi(path, nuovo)
     _aggiorna_storico(path, s["id"], domanda=testi["domanda"], titolo=testi["titolo_grafico"],
-                      grafico=scelte["grafico"])
+                      grafico=scelte["grafico"], stile=scelte.get("stile"))
     log.info("Rigenerato %s (%s)", path.name, ", ".join(c["campo"] for c in correzioni) or "nessuna modifica")
 
 

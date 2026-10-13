@@ -39,7 +39,7 @@ from pipeline.calendario import GIORNI, carica_calendario, carica_preferiti
 from pipeline.claude import riepilogo_consumi
 from pipeline.disegna import OUTPUT_DIR, render
 from pipeline.periodi import Periodo
-from pipeline.racconta import costruisci_carosello
+from pipeline.racconta import costruisci_carosello, ROTAZIONE
 from pipeline.scegli import (DatasetEsauriti, NessunaSerie, SerieNonValida, fascia_esaurita, pulisci_nome, scegli,
                              scegli_senza_claude)
 from sources.istat import Istat
@@ -128,7 +128,7 @@ def varieta(storico: list[dict], chiave: str, n: int = 10) -> str:
 
 def stili_precedenti(storico: list[dict]) -> dict:
     """L'ultimo stile di copertina usato e il grafico dell'ultima copertina con grafico (per non ripeterli)."""
-    con_stile = sorted((v for v in storico if v.get("stile")), key=lambda v: v["data"])
+    con_stile = sorted((v for v in storico if v.get("stile") in ROTAZIONE), key=lambda v: v["data"])
     col_grafico = [v for v in con_stile if v["stile"].startswith("grafico")]
     # i primi post (prima delle copertine a rotazione) erano tutti "numero su sfondo scuro"
     return {"stile": con_stile[-1]["stile"] if con_stile else ("numero_scuro" if storico else None),
@@ -150,7 +150,8 @@ def esegui(s: dict, cal: dict, usa_claude: bool = True, forza: bool = False,
                                                       usa_claude=usa_claude, precedente=precedente,
                                                       varieta=varieta(storico or [], "grafico"),
                                                       revisione=cal.get("revisione", True),
-                                                      stili_precedenti=stili_precedenti(storico or []))
+                                                      stili_precedenti={**stili_precedenti(storico or []),
+                                                                        "sabato": QUANDO.weekday() == 5})
     if precedente and all(o == "modello" for o in rapporto["origine"].values()):
         raise NonPubblicabile("senza i testi di Claude sarebbe uguale all'ultima volta")
 

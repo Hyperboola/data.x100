@@ -299,6 +299,4 @@ def render(slides: list[tuple[str, dict]], nome: str, out_dir: Path = OUTPUT_DIR
                 page.close()
         finally:
             browser.close()
-    if (reel := [p for p in paths if "_reel_" in p.name]) and (video := video_reel(reel, out_dir / f"{nome}_reel.mp4")):
-        paths.append(video)
     return paths

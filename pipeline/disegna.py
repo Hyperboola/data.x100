@@ -5,9 +5,7 @@ Requisito una tantum: python -m playwright install chromium
 """
 from __future__ import annotations
 
-import logging
 import math
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -304,25 +302,3 @@ def render(slides: list[tuple[str, dict]], nome: str, out_dir: Path = OUTPUT_DIR
     if (reel := [p for p in paths if "_reel_" in p.name]) and (video := video_reel(reel, out_dir / f"{nome}_reel.mp4")):
         paths.append(video)
     return paths
-
-
-SECONDI_SLIDE = (3, 5, 4)  # copertina, grafico (da leggere), chiusura
-
-
-def video_reel(slide: list[Path], destinazione: Path) -> Path | None:
-    """Le slide 9:16 in sequenza in un MP4 (H.264, 30 fps): Meta Business Suite programma i reel solo come video,
-    e lo stesso file va bene per TikTok. Senza imageio-ffmpeg si salta, con un avviso."""
-    try:
-        import imageio_ffmpeg
-    except ImportError:
-        logging.getLogger(__name__).warning("video del reel non creato: manca imageio-ffmpeg "
-                                            "(pip install imageio-ffmpeg)")
-        return None
-    with tempfile.TemporaryDirectory() as cartella:
-        elenco = Path(cartella) / "slide.txt"
-        righe = [f"file '{p.resolve()}'\nduration {SECONDI_SLIDE[min(i, 2)]}" for i, p in enumerate(slide)]
-        elenco.write_text("\n".join(righe) + f"\nfile '{slide[-1].resolve()}'\n")  # l'ultima va ripetuta
-        subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
-                        "-i", str(elenco), "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-crf", "18",
-                        "-movflags", "+faststart", str(destinazione)], check=True)
-    return destinazione

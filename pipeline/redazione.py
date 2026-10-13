@@ -30,7 +30,7 @@ import pandas as pd
 from pipeline.calendario import carica_calendario
 from pipeline.claude import chiedi, prompt
 from pipeline.disegna import OUTPUT_DIR, render
-from pipeline.racconta import GRAFICI, GRUPPI, _completezza, costruisci_carosello, numeri, pulisci
+from pipeline.racconta import GRAFICI, GRUPPI, STILI, _completezza, costruisci_carosello, numeri, pulisci
 from pipeline.run import STORICO, scarica
 from pipeline.scegli import _soggetto_unita, filtri_ricognizione, serie_fresche
 from sources.istat import Istat, slug_filtri
@@ -44,6 +44,9 @@ LIMITI = {campo: n for g in GRUPPI.values() for campo, n in g.items()}
 # campi della serie, modificabili anche loro: compaiono nelle slide
 ETICHETTE_SERIE = {"occhiello": "Occhiello (in alto nelle slide)", "unita": "Unità di misura (es. %, €, anni, per 100 famiglie)",
                    "fonte_testo": "Fonte (in fondo alle slide)"}
+NOMI_STILI = {"numero_scuro": "Numero · sfondo scuro", "grafico_chiaro": "Grafico · sfondo chiaro",
+              "numero_arancio": "Numero · sfondo arancione", "numero_chiaro": "Numero · sfondo chiaro",
+              "grafico_scuro": "Grafico · sfondo scuro"}
 NOMI_GRAFICI = {"colonne": "Colonne", "linea": "Linea", "area": "Area", "barre": "Barre (classifica)",
                 "ciambella": "Ciambella (parti di un totale)", "linee": "Più linee", "indice": "Linee in indice (base 100)",
                 "variazioni": "Barre delle variazioni"}
@@ -144,7 +147,8 @@ def _aggiorna_storico(path: Path, vecchio_id: str, **campi) -> None:
     STORICO.write_text(json.dumps(voci, ensure_ascii=False, indent=2))
 
 
-def rigenera(path: Path, testi_nuovi: dict, grafico: str | None = None, serie_nuova: dict | None = None) -> None:
+def rigenera(path: Path, testi_nuovi: dict, grafico: str | None = None, serie_nuova: dict | None = None,
+             stile: str | None = None) -> None:
     """Rifà il post con i testi corretti (e, se indicati, un altro grafico, occhiello, unità o fonte)."""
     vecchio = _leggi(path)
     s = {**vecchio["serie"], **{k: v.strip() for k, v in (serie_nuova or {}).items() if k in ETICHETTE_SERIE}}
@@ -153,6 +157,8 @@ def rigenera(path: Path, testi_nuovi: dict, grafico: str | None = None, serie_nu
     scelte = dict(vecchio["scelte"])
     if grafico and grafico in vecchio.get("grafici_ammessi", [grafico]):
         scelte["grafico"] = grafico
+    if stile in STILI:
+        scelte["stile"] = stile
     nuovo = _ricostruisci(path, s, df, nomi, {"scelte": scelte, "testi": testi})
     correzioni = [{"campo": k, "prima": vecchio["testi"].get(k, ""), "dopo": testi[k]}
                   for k in ETICHETTE if testi.get(k) != vecchio["testi"].get(k)]
@@ -355,6 +361,8 @@ def pagina(giorno: str, messaggi: dict[str, str]) -> str:
         ammessi = rap.get("grafici_ammessi") or [rap["scelte"]["grafico"]]
         grafico = "".join(f'<option value="{g}"{" selected" if g == rap["scelte"]["grafico"] else ""}>'
                           f'{NOMI_GRAFICI.get(g, g)}</option>' for g in ammessi)
+        stile = "".join(f'<option value="{k}"{" selected" if k == rap["scelte"].get("stile", "numero_scuro") else ""}>'
+                        f'{NOMI_STILI[k]}</option>' for k in STILI)
         campi_serie = "".join(
             f'<label for="{nome}-{c}">{e}</label><input id="{nome}-{c}" name="{c}" '
             f'value="{html.escape(str(rap["serie"].get(c) or ""))}">' for c, e in ETICHETTE_SERIE.items())
@@ -369,6 +377,7 @@ def pagina(giorno: str, messaggi: dict[str, str]) -> str:
             f'{avvisi}{slide}'
             f'<form method="post" action="/salva"><input type="hidden" name="file" value="{path.name}">'
             f'<input type="hidden" name="giorno" value="{giorno}">'
+            f'<label>Copertina</label><select name="stile">{stile}</select>'
             f'<label>Grafico</label><select name="grafico">{grafico}</select>{campi_serie}{campi}'
             + (f'<label class="verifica"><input type="checkbox" name="verificato" value="1" style="width:auto"> '
                f'Ho verificato gli avvisi ⚠ sui dati e il post è corretto</label>' if rap.get("da_controllare") else "")
@@ -474,7 +483,7 @@ def avvia(giorno: str, porta: int = PORTA) -> None:
                         approva(path)
                         messaggi[nome] = '<div class="ok">✅ Post approvato.</div>'
                 else:
-                    rigenera(path, testi, dati.get("grafico"), serie_nuova)
+                    rigenera(path, testi, dati.get("grafico"), serie_nuova, dati.get("stile"))
                     avvisi = numeri_sconosciuti(_leggi(path), testi)
                     messaggi[nome] = '<div class="ok">✓ Slide rigenerate.</div>' + "".join(
                         f'<div class="avviso">Numeri che non compaiono nei dati: {html.escape(a)}</div>' for a in avvisi)

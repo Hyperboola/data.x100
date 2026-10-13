@@ -92,7 +92,7 @@ def scegli(sottotema: str, frequenza: str, cal: dict, esclusi: set[str], istat: 
             raise SerieNonValida(f"tempo esaurito dopo {MINUTI_SCELTA} minuti: riprovo con il prossimo giro", provati)
         try:
             codici, meta = istat.struttura(flow)
-            serie = istat.serie_disponibili(flow, filtri_ricognizione(codici, frequenza))
+            serie = istat.serie_disponibili(flow, filtri_ricognizione(codici, frequenza), max_giorni=MEMORIA_GIORNI)
         except NessunDato:  # nessuna serie di questa frequenza (o per l'Italia): non è lento, è vuoto
             _ricorda(memoria, flow, pd.DataFrame({"time_period": []}))  # vuoto per tutte le frequenze
             continue
@@ -350,6 +350,7 @@ def _unita_da_nomi(testo: str) -> str:
 
 
 # --- Senza Claude: dataset e serie scelti con regole ---------------------------------------------
+PAROLE_GRUPPI = {"maschi": "uomini", "femmine": "donne"}  # come si dice sui social
 PAROLE_TOTALE = ("total", "tutte", "tutti", "complesso", "mondo", "world", "indice generale")
 # Dimensioni che descrivono COSA si misura (indicatore, unità, base): il codice scelto lì è già nel soggetto.
 # In tutte le altre, se non si sceglie il totale, la serie è solo una parte e il soggetto deve dirlo.
@@ -409,7 +410,7 @@ def fascia_esaurita(sottotema: str, frequenza: str, cal: dict, istat: Istat | No
 
 
 def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[str],
-                        istat: Istat | None = None, **_) -> dict:
+                        istat: Istat | None = None, serie_usate: set[str] | None = None, **_) -> dict:
     """Come scegli(), ma senza nessuna chiamata a Claude.
 
     Dataset: il più aggiornato tra quelli non tecnici con serie fresche. Serie: il totale per ogni
@@ -429,10 +430,12 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
     tecnico = titoli.map(lambda t: any(p in t for p in TECNICI))
     # prima i dataset che nel titolo dicono la frequenza cercata, in fondo quelli che ne dicono un'altra
     # ("Tasso di disoccupazione - dati mensili" non serve quando si cercano dati annuali)
-    c = c.assign(_tecnico=tecnico, _frequenza=titoli.map(lambda t: _distanza_frequenza(t, frequenza)))
-    c = c.sort_values(["_tecnico", "_frequenza", "last_update"], ascending=[True, True, False],
+    # prima quelli che la memoria sa già buoni (di solito con l'elenco delle serie già salvato: zero richieste)
+    ignoto = c["dataset"].map(lambda f: not _noto_fresco(memoria, f, frequenza, soglia))
+    c = c.assign(_ignoto=ignoto, _tecnico=tecnico, _frequenza=titoli.map(lambda t: _distanza_frequenza(t, frequenza)))
+    c = c.sort_values(["_ignoto", "_tecnico", "_frequenza", "last_update"], ascending=[True, True, True, False],
                       na_position="last").head(8)
-    provati, di_fila = set(), 0  # di_fila: timeout consecutivi
+    provati, di_fila, giu = set(), 0, False  # di_fila: timeout consecutivi · giu: ISTAT non risponde
     for n, riga in enumerate(c.itertuples(), start=1):
         flow = riga.dataset
         provati.add(flow)
@@ -441,13 +444,17 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
         log.info("%s/%s: controllo %s (%s/%s) · %s", sottotema, frequenza, flow, n, len(c), _taglia(str(riga.titolo), 60))
         try:
             codici, meta = istat.struttura(flow)
-            serie = istat.serie_disponibili(flow, filtri_ricognizione(codici, frequenza))
+            filtri_r = filtri_ricognizione(codici, frequenza)
+            if giu and not istat.serie_in_cache(flow, filtri_r, MEMORIA_GIORNI):
+                continue  # ISTAT è giù e di questo non abbiamo l'elenco salvato: inutile aspettare un altro timeout
+            serie = istat.serie_disponibili(flow, filtri_r, max_giorni=MEMORIA_GIORNI)
         except NessunDato:  # nessuna serie di questa frequenza (o per l'Italia): non è lento, è vuoto
             _ricorda(memoria, flow, pd.DataFrame({"time_period": []}))  # vuoto per tutte le frequenze
             continue
         except FonteNonDisponibile as exc:  # ISTAT ha un guasto: oggi si salta, ma non è colpa del dataset
             log.info("%s/%s: ISTAT non risponde per %s, lo salto per oggi (%s)", sottotema, frequenza, flow,
                      str(exc)[:80])
+            giu = True
             continue
         except Exception as exc:
             if "timed out" in str(exc).lower():
@@ -474,8 +481,8 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
             continue
         titolo = meta.get("nome") or riga.titolo
         categoria = riga.percorso.split(" > ")[-1]
-        scelta = scegli_codici(fresche, codici, frequenza, titolo, pref)
-        if scelta is None:
+        scelta = _alternativa(fresche, codici, frequenza, titolo, pref, flow, serie_usate or set())
+        if scelta is None:  # tutte le serie fresche di questo dataset sono già state pubblicate
             continue
         filtri, variabile, nomi_scelti = scelta
         soggetto, unita = _soggetto_unita(codici, filtri, titolo)
@@ -485,8 +492,12 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
             # la parte specifica, la spiegazione completa resta nel testo come "(...)"
             generale, breve = soggetto.rsplit(": ", 1)
             soggetto = f"{generale} ({breve})"
-        if parte := [p for p in nomi_scelti.get("parte", []) if p and p.lower() not in soggetto.lower()]:
-            soggetto = f"{soggetto} ({', '.join(x[:1].lower() + x[1:] if x[1:2].islower() else x for x in parte)})"
+        elif len(soggetto) > 40 and " (" in soggetto:  # "inflazione (prezzi al consumo per ...)": titolo "Inflazione"
+            breve = soggetto.split(" (", 1)[0]
+        parte = [PAROLE_GRUPPI.get(p.lower(), p) for p in nomi_scelti.get("parte", []) if p and p.lower() not in soggetto.lower()]
+        testo_parte = ", ".join(x[:1].lower() + x[1:] if x[1:2].islower() else x for x in parte)
+        if parte:
+            soggetto = f"{soggetto} ({testo_parte})"
         luogo = "Italia" if variabile else nomi_scelti.get("territorio", "Italia")
         # fonte breve: il nome più chiaro tra categoria e dataset, senza ripetizioni, su una o due righe
         if categoria.lower() in titolo.lower() or titolo.lower().startswith(categoria.lower()[:20]):
@@ -502,8 +513,8 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
         aree_scelte = filtri.get(variabile, []) if variabile else []
         nome_area = lambda c: dict(zip(codici["code"], codici["name"])).get(c, "")  # noqa: E731
         zona = "area" if any(_ripartizione(nome_area(c)) for c in aree_scelte) else "regione"
-        if breve != soggetto and not parte:
-            Sogg = breve[:1].upper() + breve[1:]
+        if breve != soggetto:  # titolo corto, con la parte se c'è: "Teatro (donne)"
+            Sogg = breve[:1].upper() + breve[1:] + (f" ({testo_parte})" if parte else "")
         else:
             Sogg = soggetto[:1].upper() + soggetto[1:]
         log.info("%s/%s: scelto senza Claude %s (%s)", sottotema, frequenza, flow, titolo)
@@ -521,8 +532,28 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
     raise SerieNonValida(f"nessuno dei {len(provati)} dataset più recenti ha serie {frequenza} utilizzabili", provati)
 
 
-def scegli_codici(fresche, codici, frequenza: str, titolo: str, pref: dict):
-    """(filtri, dimensione variabile o None, nomi utili) per una serie esistente; None se impossibile."""
+def _alternativa(fresche, codici, frequenza: str, titolo: str, pref: dict, flow: str, usate: set[str]):
+    """La prima serie del dataset mai pubblicata: quella di sempre, poi un altro indicatore (musei → teatro),
+    poi una parte (donne, giovani, un prodotto), infine un'altra misura. Tutto sui dati già letti: zero richieste."""
+    def priorita(d: str) -> int:
+        alto = d.upper()
+        return 0 if alto in ("DATA_TYPE", "INDICATOR", "TIPO_DATO") else 2 if any(k in alto for k in DESCRITTIVE) else 1
+    dims = sorted((d for d in fresche.columns if d not in ("time_period", "freq")
+                   and not any(k in d.upper() for k in ("REF_AREA", "TERR", "AREA"))), key=priorita)
+    singole = [{d: c} for d in dims for c in dict.fromkeys(fresche[d])]
+    indicatori = [f for f in singole if priorita(next(iter(f))) == 0]
+    gruppi = [f for f in singole if priorita(next(iter(f))) == 1]
+    coppie = [{**i, **g} for i in indicatori for g in gruppi]  # "teatro" × "donne", "cinema" × "15-24 anni"
+    for forza in [None, *singole, *coppie]:
+        scelta = scegli_codici(fresche, codici, frequenza, titolo, pref, forza)
+        if scelta and f"{flow}|{slug_filtri(scelta[0])}" not in usate:
+            return scelta
+    return None
+
+
+def scegli_codici(fresche, codici, frequenza: str, titolo: str, pref: dict, forza: dict | None = None):
+    """(filtri, dimensione variabile o None, nomi utili) per una serie esistente; None se impossibile.
+    forza: {dimensione: codice} da usare al posto della scelta abituale (per le altre serie di un dataset)."""
     nomi = {(d.lower(), c): n for d, c, n in codici[["dimension", "code", "name"]].itertuples(index=False)}
     dims = [c for c in fresche.columns if c != "time_period"]
     righe, filtri, utili = fresche, {}, {}
@@ -545,14 +576,16 @@ def scegli_codici(fresche, codici, frequenza: str, titolo: str, pref: dict):
                   if (c.upper() in TOTALI and (e_territorio or c.upper() not in ("IT", "ITALIA")))
                   or any(p in nomi.get((d, c), "").lower() for p in PAROLE_TOTALE)
                   or (e_territorio and nomi.get((d, c), "").lower() == "italia")]
-        if totali:
+        if forza and forza.get(d) in presenti:
+            scelto = forza[d]
+        elif totali:
             scelto = totali[0]
         else:  # es. l'indicatore: quello il cui nome somiglia di più al titolo del dataset
             somiglianza = lambda c: len(parole_titolo & set(nomi.get((d, c), "").lower().split()))  # noqa: E731
             scelto = max(presenti, key=somiglianza)
-            if not e_territorio and len(presenti) > 1 and not any(k in d.upper() for k in DESCRITTIVE):
-                # una sola voce tra tante (es. un prodotto del paniere): va detto nel soggetto
-                utili.setdefault("parte", []).append(pulisci_soggetto(nomi.get((d, scelto), scelto)))
+        if scelto not in totali and not e_territorio and len(presenti) > 1 and not any(k in d.upper() for k in DESCRITTIVE):
+            # una sola voce tra tante (es. un prodotto del paniere, le donne): va detto nel soggetto
+            utili.setdefault("parte", []).append(pulisci_soggetto(nomi.get((d, scelto), scelto)))
         righe = righe[righe[d] == scelto]
         filtri[d.upper()] = scelto
         if d == territorio and scelto.upper().startswith("IT") and scelto.upper() not in ("IT", "ITALIA"):
@@ -616,7 +649,8 @@ PERCENTUALI = re.compile(r"^(tasso|tassi) di (occupazione|disoccupazione|inattiv
 _RUMORE = (re.compile(r"\s*\((base\s*)?\d{4}\s*=\s*100\)", re.I),          # "(base 2025=100)"
            re.compile(r"\s*\(base \d{4}\)", re.I),                            # "(base 2025)"
            re.compile(r"\s*[-–]\s*dati (mensili|trimestrali|annuali)\b.*$", re.I),  # "- dati mensili"
-           re.compile(r"\s*[-–]\s*(mensili|trimestrali|annuali)\b.*$", re.I))
+           re.compile(r"\s*[-–]\s*(mensili|trimestrali|annuali)\b.*$", re.I),
+           re.compile(r"\s*[-–]\s*medie annue\b.*$", re.I))                     # "- medie annue"
 
 
 def pulisci_soggetto(testo: str) -> str:
@@ -641,4 +675,12 @@ def _soggetto_unita(codici, filtri: dict, titolo: str) -> tuple[str, str]:
         unita = "anni"
     if len(soggetto) > 1 and soggetto[1].islower():  # "Nati vivi" → "nati vivi", ma "PIL" resta "PIL"
         soggetto = soggetto[:1].lower() + soggetto[1:]
+    if "variazion" in tutti and "variazion" not in soggetto.lower():
+        # la misura scelta è una variazione (es. MEASURE "variazioni percentuali sull'anno precedente"):
+        # i numeri non sono l'indice ma quanto è cambiato. Per i prezzi al consumo quel numero è l'inflazione.
+        unita = "%" if "percentual" in tutti or unita == "%" else unita
+        if "prezzi al consumo" in soggetto.lower():
+            soggetto = f"inflazione ({re.sub(r'^indice dei ', '', soggetto)})"
+        else:
+            soggetto = f"variazione di: {soggetto}"
     return soggetto, unita

@@ -10,6 +10,14 @@
 #}
 {% block style %}
 .testata { display: flex; flex-direction: column; gap: 20px; }
+/* Sfondo scuro: si invertono i colori del tema, così ogni parte del grafico resta leggibile */
+.slide.scura { --inchiostro: {{ c.NEBBIA }}; --nebbia: {{ c.INCHIOSTRO }}; --grigio-nota: #A9B3C2;
+               background: {{ c.INCHIOSTRO }}; color: {{ c.NEBBIA }}; }
+/* Grafico in copertina: logo in alto e "Scorri" in basso, come le altre copertine */
+.riga-logo { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; }
+.riga-logo .occhiello { color: var(--grigio-nota); }
+.copertina-g .testata .titolo { font-size: 78px; }
+.piede .scorri { font-weight: 500; white-space: nowrap; color: var(--inchiostro); }
 .occhiello { font-size: 22px; color: var(--grigio-nota); }
 .testata .titolo { font-size: 72px; line-height: 1.04; }
 .grafico { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 48px 0; min-height: 0; }
@@ -82,9 +90,14 @@
 .legenda-c .in-evidenza { font-weight: 600; }
 {% endblock %}
 {% block body %}
-<div class="slide chiara{{ ' reel' if formato == 'reel' }}">
+{% set in_copertina = copertina | default(false) %}
+<div class="slide {{ tema | default('chiara') }}{{ ' copertina-g' if in_copertina }}{{ ' reel' if formato == 'reel' }}">
   <div class="testata">
+    {% if in_copertina %}
+    <div class="riga-logo"><div class="logo">Data<span>%</span></div><div class="occhiello mono">{{ occhiello }}</div></div>
+    {% else %}
     <div class="occhiello mono">{{ occhiello }}</div>
+    {% endif %}
     <div class="titolo">{{ titolo }}</div>
   </div>
 
@@ -164,7 +177,8 @@
   {% if nota %}<div class="nota">{{ nota }}</div>{% endif %}
   <div class="piede">
     <div class="fonte">{{ fonte }}</div>
-    {% if pagina %}<div class="pagina">{{ pagina }}</div>{% endif %}
+    {% if pagina %}<div class="pagina">{{ pagina }}</div>
+    {% elif in_copertina and formato != "reel" %}<div class="scorri">Scorri →</div>{% endif %}
   </div>
 </div>
 {% endblock %}

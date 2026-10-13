@@ -22,6 +22,9 @@ def candidati(sottotema: str, cal: dict, istat: Istat | None = None) -> pd.DataF
     codici = set(cal["sottotemi"][sottotema])
     esclusi = set(cal["esclusi"]["categorie"])
     albero = istat.categorie()
+    if spariti := codici - set().union(*albero["antenati"].map(set)):  # ISTAT ha rinominato o tolto una categoria
+        logging.getLogger(__name__).warning("%s: categorie non più nel catalogo ISTAT %s (cercale con --cerca)",
+                                            sottotema, sorted(spariti))
     delicati = set(albero.loc[albero["antenati"].map(lambda a: bool(esclusi & set(a))), "dataset"])
     scelti = albero[albero["antenati"].map(lambda a: bool(codici & set(a))) & ~albero["dataset"].isin(delicati)]
     scelti = scelti.drop_duplicates("dataset")

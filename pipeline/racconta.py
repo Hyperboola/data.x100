@@ -77,7 +77,8 @@ def compatto(v: float, decimali: int = 0, unita: str = "") -> str:
     """Per i numeri grandi: 1.040.000.000 -> '1,04 mld'."""
     for soglia, nome in ((1e9, "mld"), (1e6, "mln")):
         if abs(v) >= soglia:
-            return f"{fmt_it(v / soglia, 2)} {nome}{' ' + unita if unita else ''}"
+            q = v / soglia  # 160,8 mln · 1,04 mld: due decimali solo sotto il 10, altrimenti uno
+            return f"{fmt_it(q, 2 if abs(q) < 10 else 1)} {nome}{' ' + unita if unita else ''}"
     return valore(v, decimali, unita)
 
 
@@ -216,6 +217,8 @@ def numero_indice(r: dict) -> bool:
     """Numeri indice a base fissa (es. prezzi, base 2025=100): il livello (105) non dice niente a chi legge,
     contano solo le variazioni. Più stretto di e_indice, che scambia per indici anche gli 'indicatori'."""
     nome = f"{r.get('fonte_testo', '')} {r.get('soggetto', '')}".lower()
+    if r.get("unita") == "%" or "inflazione" in nome or "variazion" in nome:  # già una variazione, non un livello
+        return False
     return bool(re.search(r"base\s*(19|20)\d\d|\d{4}\s*=\s*100|numeri indice|indice (armonizzato|nazionale|"
                           r"generale|dei prezzi)|prezzi al consumo|indice della produzione|indice del fatturato", nome))
 
@@ -340,6 +343,8 @@ def storia_serie(r: dict, df: pd.DataFrame, finestra: int) -> Storia:
              "dati": _dati({r["soggetto"]: coppie}, dec, unita)}
     if not proiezione and (avviso := salto_insolito(coppie, tasso)):
         extra["da_controllare"] = [avviso]
+    if min(v for _, v in coppie) < 0:  # colonne e area partono da zero: con valori negativi solo la linea
+        grafici = ("linea",)
     return Storia("serie", menu, {q.codice: q.nome for q, _ in coppie}, grafici,
                   scelte, testi, tempo, occhiello, disegna, extra)
 
@@ -549,10 +554,54 @@ def _testi_base(r: dict, didascalia: str, titolo: str, nota: str, punto_1: str, 
 
 
 # --- Carosello -------------------------------------------------------------------------------------
+# Stili delle copertine, a rotazione: (cosa c'è in copertina, sfondo della copertina, sfondo della 2ª slide).
+# Con il grafico in copertina, la 2ª slide è il numero grande; con il numero in copertina, è il grafico.
+STILI = {
+    "numero_scuro":   ("numero", "scura", "chiara"),
+    "grafico_chiaro": ("grafico", "chiara", "scura"),
+    "numero_arancio": ("numero", "arancio", "chiara"),
+    "numero_chiaro":  ("numero", "chiara", "scura"),
+    "grafico_scuro":  ("grafico", "scura", "chiara"),
+}
+GRAFICI_SU_SCURO = ("linea", "area", "colonne", "barre", "orizzontale")  # colori pensati per lo sfondo scuro
+
+
+def scegli_stile(precedenti: dict, ammessi: tuple, preferito: str) -> tuple[str, str]:
+    """(stile, grafico): lo stile dopo l'ultimo usato; se mette il grafico in copertina, un tipo di grafico
+    diverso dall'ultima copertina con grafico. Se i dati non lo permettono si passa allo stile successivo."""
+    nomi = list(STILI)
+    dopo = (nomi.index(precedenti["stile"]) + 1) if precedenti.get("stile") in nomi else 0
+    for stile in nomi[dopo:] + nomi[:dopo]:
+        cosa, sfondo_cop, sfondo_2 = STILI[stile]
+        if cosa == "numero":
+            return stile, preferito
+        sfondo_grafico = sfondo_cop
+        adatti = [g for g in ammessi if g != precedenti.get("grafico_copertina")
+                  and (sfondo_grafico != "scura" or g in GRAFICI_SU_SCURO)]
+        if adatti:
+            return stile, preferito if preferito in adatti else adatti[0]
+    return "numero_scuro", preferito
+
+
+def _impagina(stile: str, numero: tuple, grafico: tuple, testi: dict) -> list:
+    """Le prime due slide nello stile scelto. numero e grafico: (template, dati) già pronti."""
+    cosa, sfondo_cop, sfondo_2 = STILI.get(stile, STILI["numero_scuro"])
+    (t_num, d_num), (t_gr, d_gr) = numero, grafico
+    if cosa == "numero":
+        d_gr = {**d_gr, "tema": sfondo_2 if d_gr.get("forma") in GRAFICI_SU_SCURO else "chiara"}
+        return [(t_num, {**d_num, "tema": sfondo_cop}), (t_gr, d_gr)]
+    # grafico in copertina: la domanda è il suo titolo; il numero grande passa alla 2ª slide
+    copertina_g = {**d_gr, "tema": sfondo_cop, "copertina": True, "titolo": testi["domanda"],
+                   "nota": testi["didascalia_copertina"], "pagina": ""}
+    seconda = {**d_num, "tema": sfondo_2, "titolo": testi["titolo_grafico"], "didascalia": testi["nota_grafico"],
+               "pagina": "2/3"}
+    return [(t_gr, copertina_g), (t_num, seconda)]
+
+
 def costruisci_carosello(r: dict, df: pd.DataFrame, finestra: int, nomi: dict[str, str] | None = None,
                          usa_claude: bool = True, precedente: dict | None = None,
                          varieta: str = "", revisione: bool = True,
-                         imposto: dict | None = None) -> tuple[list, str, dict]:
+                         imposto: dict | None = None, stili_precedenti: dict | None = None) -> tuple[list, str, dict]:
     """Restituisce (slide, didascalia Instagram, rapporto).
 
     df: colonne time_period, obs_value e, per confronti e serie multiple, categoria.
@@ -593,6 +642,13 @@ def costruisci_carosello(r: dict, df: pd.DataFrame, finestra: int, nomi: dict[st
             scelte.update(dati["scelte"])
             testi.update(dati["testi"])
             origine[gruppo] = "claude"
+    if scelte["grafico"] not in st.grafici:  # es. colonne con valori negativi: si usa un grafico adatto ai dati
+        scelte["grafico"] = st.grafici[0]
+    if not scelte.get("stile") or scelte["stile"] not in STILI:  # i post già fatti tengono il loro stile
+        if stili_precedenti is None:
+            scelte["stile"] = "numero_scuro"
+        else:
+            scelte["stile"], scelte["grafico"] = scegli_stile(stili_precedenti, st.grafici, scelte["grafico"])
     rapporto.update(scelte=scelte, testi=testi, origine=origine, grafici_ammessi=list(st.grafici))
 
     fonte = f"Fonte: {r.get('fonte_testo', 'ISTAT')}"
@@ -603,9 +659,10 @@ def costruisci_carosello(r: dict, df: pd.DataFrame, finestra: int, nomi: dict[st
         punti.append({"numero": numero, "unita": sotto, "testo": testi[campo], "evidenzia": i == 0})
     numero, sotto = separa_unita(st.menu[scelte["copertina"]]["copertina"], unita)
     slides = [
-        copertina(occhiello=r["occhiello"], titolo=testi["domanda"], numero=numero, unita=sotto,
-                  didascalia=testi["didascalia_copertina"], fonte=fonte),
-        st.disegna(scelte, testi, fonte),
+        *_impagina(scelte["stile"],
+                   copertina(occhiello=r["occhiello"], titolo=testi["domanda"], numero=numero, unita=sotto,
+                             didascalia=testi["didascalia_copertina"], fonte=fonte),
+                   st.disegna(scelte, testi, fonte), testi),
         chiusura(punti=punti, invito=testi["invito"], pagina="3/3"),
     ]
     testo_ig = f"{testi['post']}\n\n{fonte}. Elaborazione Data%. {LICENZA}.\n\n{HASHTAG}"

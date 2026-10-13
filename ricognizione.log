@@ -1547,3 +1547,126 @@ WARNING [1/965] 34_198_DF_DCCV_INCPOVRFAM_8 → irraggiungibile (https://esplora
 WARNING [2/965] 34_198_DF_DCCV_INCPOVRFAM_7 → irraggiungibile (https://esploradati.istat.it/SDMXWS/rest/data/34_198_DF_DCCV_INCPOVRFAM_7/.IT+ITCD+ITC+ITD+ITE+ITFG+ITF+ITG+ITZ+ITS..: server non raggiungibile (ConnectTimeout))
 WARNING [3/965] 34_198_DF_DCCV_INCPOVRFAM_6 → irraggiungibile (https://esploradati.istat.it/SDMXWS/rest/data/34_198_DF_DCCV_INCPOVRFAM_6/.IT+ITCD+ITC+ITD+ITE+ITFG+ITF+ITG+ITZ+ITS..: server non raggiungibile (ConnectTimeout))
 WARNING ISTAT non si raggiunge: aspetto 10 minuti e riprovo (pausa 1 di 6)
+INFO 2043 dataset nel calendario, 1078 già in memoria, 965 da leggere (circa 8:02:30, fine verso le 18:14)
+INFO Puoi interrompere con Ctrl+C quando vuoi: quello che è stato letto resta in memoria.
+INFO [1/965] 115_333_DF_DCSC_INDXPRODIND_1_6 · Indice della produzione industriale - Mensili… → mensile 2026-08
+INFO [2/965] 28_185_DF_DCIS_MIGRAZIONI_1 · Migrazioni interne  - Italiani e stranieri → annuale 2025
+INFO [3/965] 56_190_DF_DCIS_LAUREATI_1 · Laureati → annuale 2024
+INFO [4/965] 29_7_DF_DCIS_POPSTRRES1_1 · Italia, regioni, province → annuale 2026
+INFO [5/965] 609_1_DF_DCCV_URBANENV_13 · Mobilità urbana - trasporto pubblico locale → annuale 2024
+WARNING [6/965] 41_270_DF_DCIS_MORTIFERITISTR1_TS3_1 → irraggiungibile (https://esploradati.istat.it/SDMXWS/rest/data/41_270_DF_DCIS_MORTIFERITISTR1_TS3_1/.IT+ITCD+ITC+ITD+ITE+ITFG+ITF+ITG+ITZ+ITS.........: server non raggiungibile (ConnectionError))
+INFO [7/965] 609_1_DF_DCCV_URBANENV_1 · Acqua - consumo → annuale 2022
+INFO [8/965] 609_1_DF_DCCV_URBANENV_9 · Energia - rete di ricarica per auto elettriche → annuale 2024
+INFO [9/965] 609_1_DF_DCCV_URBANENV_17 · Rumore - attività temporanee → annuale 2024
+INFO [10/965] 174_81_DF_DCCV_COPPIE1_2 · Coppia con figli, età della donna, numero di… → annuale 2023
+INFO [11/965] 83_63_DF_DCCV_AVQ_PERSONE_241 · PC - dettaglio età → annuale 2025
+INFO [12/965] 83_63_DF_DCCV_AVQ_PERSONE_208 · Stato di salute - regioni e tipo di comune → annuale 2025
+INFO [13/965] 101_1015_DF_DCSP_COLTIVAZIONI_10 · Intenzioni di semina → annuale 2026
+INFO [14/965] 163_88_DF_DCCN_OCCQSEC2010_1 · Occupazione per branca di attività → trimestrale 2026-Q2
+INFO [15/965] 28_185_DF_DCIS_MIGRAZIONI_2 · Immigrati - cittadinanza → vuoto
+INFO [16/965] 56_857_DF_DCIS_IMMATRIC1_1 · Immatricolati → annuale 2025
+INFO [17/965] 29_7_DF_DCIS_POPSTRRES1_12 · Umbria → vuoto
+INFO [18/965] 609_1_DF_DCCV_URBANENV_12 · Mobilità urbana - parco veicolare → annuale 2024
+WARNING [19/965] 41_270_DF_DCIS_MORTIFERITISTR1_TS2_1 → irraggiungibile (https://esploradati.istat.it/SDMXWS/rest/data/41_270_DF_DCIS_MORTIFERITISTR1_TS2_1/.IT+ITCD+ITC+ITD+ITE+ITFG+ITF+ITG+ITZ+ITS.........: server non raggiungibile (ConnectionError))
+INFO [20/965] 609_1_DF_DCCV_URBANENV_2 · Acqua - razionamento → annuale 2024
+INFO [21/965] 609_1_DF_DCCV_URBANENV_8 · Energia - fonti rinnovabili → annuale 2024
+INFO [22/965] 609_1_DF_DCCV_URBANENV_3 · Qualità dell'aria - monitoraggio inquinanti → annuale 2024
+INFO [23/965] 122_54_DF_DCSC_TUR_3 · Movimento dei clienti negli esercizi ricettivi… → annuale 2025, mensile 2026-07
+INFO [24/965] 174_81_DF_DCCV_COPPIE1_3 · Coppia con figli, età della donna, età del figlio… → annuale 2023
+INFO [25/965] 83_63_DF_DCCV_AVQ_PERSONE_240 · PC - sesso, età, titolo di studio → annuale 2025
+INFO ── 25 letti, ne mancano 940 (circa 7:54:43) ──
+INFO [26/965] 83_63_DF_DCCV_AVQ_PERSONE_207 · Stato di salute- posizione nella professione → annuale 2025
+INFO [27/965] 101_1015_DF_DCSP_COLTIVAZIONI_2 · Superfici e produzione - dati in complesso - prov → annuale 2026
+INFO [28/965] 165_889_DF_DCIS_PREVDEM1_1 · Popolazione al 1° gennaio → annuale 2080
+INFO [29/965] 28_185_DF_DCIS_MIGRAZIONI_3 · Immigrati - paesi di provenienza → vuoto
+INFO [30/965] 56_857_DF_DCIS_IMMATRIC1_2 · Immatricolati (2008-2010) → annuale 2010
+INFO [31/965] 29_7_DF_DCIS_POPSTRRES1_22 · Sardegna → vuoto
+INFO [32/965] 145_361_DF_DCSC_FABBRESID_1_8 · Tronco stradale con tratto in galleria - mensili… → mensile 2026-08
+INFO [33/965] 609_1_DF_DCCV_URBANENV_11 · Mobilità urbana - mobilità sostenibile → annuale 2024
+WARNING [34/965] 41_270_DF_DCIS_MORTIFERITISTR1_TS1_1 → irraggiungibile (https://esploradati.istat.it/SDMXWS/rest/data/41_270_DF_DCIS_MORTIFERITISTR1_TS1_1/.IT+ITCD+ITC+ITD+ITE+ITFG+ITF+ITG+ITZ+ITS.........: server non raggiungibile (ConnectionError))
+INFO [35/965] 609_1_DF_DCCV_URBANENV_14 · Rifiuti urbani - produzione → annuale 2024
+INFO [36/965] 609_1_DF_DCCV_URBANENV_7 · Energia - consumi energetici domestici e non… → annuale 2024
+INFO [37/965] 609_1_DF_DCCV_URBANENV_4 · Qualità dell'aria - valori di concentrazione e… → annuale 2024
+INFO [38/965] 122_54_DF_DCSC_TUR_4 · Residenti per regione di origine → annuale 2025, mensile 2026-07
+INFO [39/965] 174_81_DF_DCCV_COPPIE1_7 · Coppia con donna di 65 anni e più - reg. → annuale 2023
+INFO [40/965] 83_63_DF_DCCV_AVQ_PERSONE_242 · PC - condizione occupazionale → annuale 2025
+INFO [41/965] 83_63_DF_DCCV_AVQ_PERSONE_206 · Stato di salute - età, titolo di studio → annuale 2025
+INFO [42/965] 101_1015_DF_DCSP_COLTIVAZIONI_1 · Superfici e produzione - dati in complesso → annuale 2026
+INFO [43/965] 22_315_DF_DCIS_POPORESBIL1_24 · Tutti i comuni → annuale 2025, mensile 2026-06
+INFO [44/965] 28_185_DF_DCIS_MIGRAZIONI_4 · Immigrati - province di destinazione → vuoto
+INFO [45/965] 56_858_DF_DCIS_ISCRITTI1_1 · Iscritti → annuale 2025
+INFO [46/965] 29_7_DF_DCIS_POPSTRRES1_21 · Sicilia → vuoto
+INFO [47/965] 145_361_DF_DCSC_FABBRESID_1_7 · Fabbricato residenziale e capannone industriale… → mensile 2026-08
+INFO [48/965] 117_1057_DF_DCSC_TRAFERR_1 · Trasporto ferroviario - Principali dati → annuale 2024
+INFO [49/965] 41_993_DCIS_VEICOLIPRA_COM_1 · Veicoli - Pubblico registro automobilistico… → vuoto
+INFO [50/965] 609_1_DF_DCCV_URBANENV_15 · Raccolta differenziata - frazioni merceologiche → annuale 2024
+INFO ── 50 letti, ne mancano 915 (circa 8:01:54) ──
+INFO [51/965] 609_1_DF_DCCV_URBANENV_10 · Energia - teleriscaldamento → annuale 2024
+INFO [52/965] 609_1_DF_DCCV_URBANENV_16 · Rumore - attività di misura → annuale 2024
+INFO [53/965] 122_54_DF_DCSC_TUR_5 · Paese di origine → mensile 2026-07
+INFO [54/965] 174_81_DF_DCCV_COPPIE1_6 · Coppia con donna di 65 anni e più, titolo di… → annuale 2023
+INFO [55/965] 83_63_DF_DCCV_AVQ_PERSONE_243 · PC - reg. e tipo di comune → annuale 2025
+INFO [56/965] 83_63_DF_DCCV_AVQ_PERSONE_205 · Stato di salute- età dettaglio → annuale 2025
+INFO [57/965] 101_1033_DF_DCSP_MACELLAZIONI_2 · Carni bianche - dati mensili → mensile 2026-07
+INFO [58/965] 22_315_DF_DCIS_POPORESBIL1_2 · Dati mensili → mensile 2026-06
+INFO [59/965] 28_185_DF_DCIS_MIGRAZIONI_5 · Emigrati - cittadinanza → annuale 2025
+INFO [60/965] 56_858_DF_DCIS_ISCRITTI1_2 · Iscritti per tipologia e regione dell'ateneo… → annuale 2010
+INFO [61/965] 29_7_DF_DCIS_POPSTRRES1_20 · Calabria → vuoto
+INFO [62/965] 143_497_DF_DCSP_IPAB_6 · Trimestrali dal 2010 (base 2025) → trimestrale 2026-Q2
+INFO [63/965] 117_1057_DF_DCSC_TRAFERR_2 · Passeggeri e percorrenza media per tipo di… → annuale 2024
+INFO [64/965] 41_983_DF_DCIS_INCIDMORFER_COM_1 · Incidenti, morti e feriti - comuni → vuoto
+INFO [65/965] 609_1_DF_DCCV_URBANENV_22 · Rifiuti urbani - servizio di raccolta → vuoto
+INFO [66/965] 82_87_DF_DCCV_AVQ_FAMIGLIE_102 · Gas - regioni e tipo di comune → annuale 2025
+INFO [67/965] 72_1028_DF_DCCN_ESST_2 · Contributi e altri trasferimenti a fini… → annuale 2023
+INFO [68/965] 122_54_DF_DCSC_TUR_7 · Movimento dei clienti negli esercizi ricettivi… → annuale 2025, mensile 2026-08
+INFO [69/965] 174_81_DF_DCCV_COPPIE1_5 · Coppia con o senza figli con donna di 25-64 anni… → annuale 2023
+INFO [70/965] 83_63_DF_DCCV_AVQ_PERSONE_236 · Internet - sesso, età titolo di studio → annuale 2025
+INFO [71/965] 83_63_DF_DCCV_AVQ_PERSONE_211 · Consumo di farmaci - posizione nella professione → annuale 2025
+INFO [72/965] 101_1033_DF_DASH_DCSP_MACELLAZIONI_1 · Carni - dati mensili → mensile 2026-07
+INFO [73/965] 28_185_DF_DCIS_MIGRAZIONI_6 · Emigrati - paesi di destinazione → annuale 2025
+INFO [74/965] 56_858_DF_DCIS_ISCRITTI1_3 · Iscritti per regione dell'ateneo e di residenza… → annuale 2010
+INFO [75/965] 29_7_DF_DCIS_POPSTRRES1_19 · Basilicata → vuoto
+INFO ── 75 letti, ne mancano 890 (circa 7:21:05) ──
+INFO [76/965] 143_497_DF_DCSP_IPAB_1 · Trimestrali dal 2010 al 2024 (base 2015) → trimestrale 2024-Q4
+INFO [77/965] 83_63_DF_DCCV_AVQ_PERSONE_166 · Spostamenti abituali per andare a scuola → annuale 2025
+INFO [78/965] 41_288_DF_DCIS_VEICOLIPRA_1 · Veicoli - Pubblico registro automobilistico → annuale 2024
+INFO [79/965] 12_340_DF_DCCV_PRELACQ_1 · Prelievo di acqua per uso potabile → annuale 2022
+INFO [80/965] 82_87_DF_DCCV_AVQ_FAMIGLIE_101 · Energia elettrica - regioni e tipo di comune → annuale 2025
+INFO [81/965] 72_1028_DF_DCCN_ESST_1 · Contributi e altri trasferimenti a fini… → annuale 2023
+INFO [82/965] 122_54_DF_DCSC_TUR_8 · Residenti per regione di origine → annuale 2025, mensile 2026-08
+INFO [83/965] 174_81_DF_DCCV_COPPIE1_4 · Coppia con o senza figli, età della donna e… → annuale 2023
+INFO [84/965] 83_63_DF_DCCV_AVQ_PERSONE_238 · Internet - condizione occupazionale → annuale 2025
+INFO [85/965] 83_63_DF_DCCV_AVQ_PERSONE_212 · Consumo di farmaci - regioni e tipo di comune → annuale 2025
+INFO [86/965] 101_1033_DF_DCSP_MACELLAZIONI_1 · Carni rosse - dati mensili → mensile 2026-07
+INFO [87/965] 22_315_DF_DCIS_POPORESBIL1_1 · Dati annuali → annuale 2025
+INFO [88/965] 28_185_DF_DCIS_MIGRAZIONI_7 · Emigrati - province di origine → annuale 2025
+INFO [89/965] 52_1203_DF_DCCV_ESL_UNT2020_1 · Giovani dai 18 ai 24 anni d'età che abbandonano… → annuale 2020
+INFO [90/965] 29_7_DF_DCIS_POPSTRRES1_18 · Puglia → vuoto
+INFO [91/965] 143_497_DF_DCSP_IPAB_7 · Medie annue dal 2010 (base 2025) → annuale 2025
+INFO [92/965] 83_63_DF_DCCV_AVQ_PERSONE_167 · Spostamenti verso scuola - regioni e tipo di… → annuale 2025
+INFO [93/965] 41_271_DF_DCIS_VEICOLIINCID1_1 · Veicoli coinvolti in incidenti stradali → annuale 2024
+INFO [94/965] 12_60_DF_DCCV_CONSACQUA_1 · Distribuzione di acqua potabile - reg. → annuale 2022
+INFO [95/965] 18_635_DF_DCCV_CENERG_12 · Lampadine - reg. → annuale 2013
+INFO [96/965] 97_334_DF_DCCN_FLUMAT_3 · Scambi con il resto del mondo → annuale 2024
+WARNING [97/965] 122_54_DF_DCSC_TUR_9 → irraggiungibile (https://esploradati.istat.it/SDMXWS/rest/data/122_54_DF_DCSC_TUR_9: server non raggiungibile (ConnectionError))
+INFO [98/965] 174_81_DF_DCCV_COPPIE1_1 · Coppia con o senza figli, età e titolo di studio… → timeout (riprovo un'altra volta)
+INFO [99/965] 83_63_DF_DCCV_AVQ_PERSONE_239 · Internet - reg. e tipo di comune → timeout (riprovo un'altra volta)
+INFO [100/965] 83_63_DF_DCCV_AVQ_PERSONE_209 · Consumo di farmaci - età dettaglio → timeout (riprovo un'altra volta)
+INFO ISTAT sembra sovraccarico: pausa di 2 minuti
+INFO ── 100 letti, ne mancano 865 (circa 7:20:46) ──
+INFO [101/965] 101_12_DF_DCSP_PREZZIAGR_10 · Indice dei prezzi alla produzione dei prodotti… → timeout (riprovo un'altra volta)
+INFO [102/965] 56_190_DF_DCIS_LAUREATI_2 · Laureati (2007-2009) → timeout (riprovo un'altra volta)
+INFO [103/965] 29_7_DF_DCIS_POPSTRRES1_17 · Campania → timeout (riprovo un'altra volta)
+INFO ISTAT sembra sovraccarico: pausa di 2 minuti
+INFO [104/965] 83_63_DF_DCCV_AVQ_PERSONE_168 · Spostamenti per andare a lavoro - Età → timeout (riprovo un'altra volta)
+INFO [105/965] 41_270_DF_DCIS_MORTIFERITISTR1_1 · Morti e feriti in incidenti stradali → timeout (riprovo un'altra volta)
+INFO [106/965] 12_60_DF_DCCV_CONSACQUA_2 · Distribuzione di acqua potabile → timeout (riprovo un'altra volta)
+INFO ISTAT sembra sovraccarico: pausa di 2 minuti
+INFO [107/965] 18_635_DF_DCCV_CENERG_13 · Elettrodomestici - reg. → timeout (riprovo un'altra volta)
+INFO [108/965] 97_334_DF_DCCN_FLUMAT_2 · Estrazione interna di materiali utilizzati → timeout (riprovo un'altra volta)
+INFO [109/965] 122_54_DF_DCSC_TUR_12 · Per tipo di esercizio e residenza del cliente… → timeout (riprovo un'altra volta)
+INFO ISTAT sembra sovraccarico: pausa di 2 minuti
+INFO [110/965] 174_65_DF_DCCV_ASIMMETRIA_6 · Coppia con donna di 65 anni e più - reg. → timeout (riprovo un'altra volta)
+INFO [111/965] 83_63_DF_DCCV_AVQ_PERSONE_237 · Internet - dettaglio età → timeout (riprovo un'altra volta)
+INFO [112/965] 83_63_DF_DCCV_AVQ_PERSONE_210 · Consumo di farmaci - età, titolo di studio → timeout (riprovo un'altra volta)
+INFO ISTAT sembra sovraccarico: pausa di 2 minuti

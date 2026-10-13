@@ -60,7 +60,8 @@ class Client:
             else:
                 if resp.status_code == 200:
                     return resp
-                if resp.status_code == 204 or (resp.status_code == 404 and "NoRecordsFound" in resp.text):
+                if resp.status_code == 204 or (resp.status_code == 404 and ("NoRecordsFound" in resp.text
+                                                                             or "/rest/data/" in url)):
                     raise NessunDato(f"nessun dato da {url}")  # inutile riprovare
                 errore = ErroreFonte(f"HTTP {resp.status_code} da {url}: {resp.text[:300]}")
                 if 400 <= resp.status_code < 500 and resp.status_code != 429:

@@ -30,5 +30,136 @@
     "da_controllare": [
       "Salto insolito nel 2025: +15,1%, contro un cambiamento tipico di circa 4,5% l'anno. Prima di pubblicare verifica sul sito ISTAT se è cambiato il metodo o il campo di osservazione (serie non confrontabile)."
     ]
+  },
+  {
+    "data": "2026-10-12",
+    "serie": "169_750_DF_DCSP_FOI2B2025_1|DATA_TYPE=56,ECOICOP_2=00,FREQ=A,MEASURE=8,REF_AREA=IT",
+    "flow": "169_750_DF_DCSP_FOI2B2025_1",
+    "filtri": {
+      "FREQ": "A",
+      "REF_AREA": "IT",
+      "DATA_TYPE": "56",
+      "MEASURE": "8",
+      "ECOICOP_2": "00"
+    },
+    "url": "https://esploradati.istat.it/SDMXWS/rest/data/169_750_DF_DCSP_FOI2B2025_1/A.IT.56.8.00",
+    "sottotema": "prezzi",
+    "slot": "annuale",
+    "tipo_storia": "serie",
+    "grafico": "linea",
+    "periodo": "2025",
+    "ultimo_valore": 1.4,
+    "copertina": "MASSIMO",
+    "numero": "7,9%",
+    "domanda": "Nel 2022 i prezzi in Italia sono saliti del",
+    "titolo": "Nel 2025 siamo all'1,4%",
+    "da_controllare": []
+  },
+  {
+    "data": "2026-10-13",
+    "serie": "152_913_DF_DCCV_TAXINATT1_1|AGE=Y_GE15,CITIZENSHIP=TOTAL,DATA_TYPE=INAC_R,EDU_LEV_HIGHEST=99,FREQ=A,REF_AREA=IT+ITC+ITD+ITE+ITFG,SEX=9",
+    "flow": "152_913_DF_DCCV_TAXINATT1_1",
+    "filtri": {
+      "FREQ": "A",
+      "DATA_TYPE": "INAC_R",
+      "SEX": "9",
+      "AGE": "Y_GE15",
+      "EDU_LEV_HIGHEST": "99",
+      "CITIZENSHIP": "TOTAL",
+      "REF_AREA": [
+        "IT",
+        "ITC",
+        "ITD",
+        "ITE",
+        "ITFG"
+      ]
+    },
+    "url": "https://esploradati.istat.it/SDMXWS/rest/data/152_913_DF_DCCV_TAXINATT1_1/A.IT+ITC+ITD+ITE+ITFG.INAC_R.9.Y_GE15.99.TOTAL",
+    "sottotema": "occupazione",
+    "slot": "annuale",
+    "tipo_storia": "confronto",
+    "grafico": "barre",
+    "periodo": "2025",
+    "ultimo_valore": null,
+    "copertina": "MASSIMO",
+    "numero": "57,3%",
+    "domanda": "Ecco il tasso di inattività nel 2025",
+    "titolo": "Quasi 12 punti tra Mezzogiorno e Nord-est",
+    "da_controllare": []
+  },
+  {
+    "data": "2026-10-14",
+    "serie": "25_326_DF_DCIS_FECONDITA1_6|CITIZENSHIP=TOTAL,DATA_TYPE=MAVACH,FREQ=A,MOTHER_AGE=TOTAL,REF_AREA=IT",
+    "flow": "25_326_DF_DCIS_FECONDITA1_6",
+    "filtri": {
+      "FREQ": "A",
+      "REF_AREA": "IT",
+      "DATA_TYPE": "MAVACH",
+      "CITIZENSHIP": "TOTAL",
+      "MOTHER_AGE": "TOTAL"
+    },
+    "url": "https://esploradati.istat.it/SDMXWS/rest/data/25_326_DF_DCIS_FECONDITA1_6/A.IT.MAVACH.TOTAL.TOTAL",
+    "sottotema": "nascite",
+    "slot": "annuale",
+    "tipo_storia": "serie",
+    "grafico": "linea",
+    "periodo": "2024",
+    "ultimo_valore": 32.59,
+    "copertina": "ULTIMO",
+    "numero": "32,6 anni",
+    "domanda": "In Italia si diventa mamme sempre più tardi",
+    "titolo": "Ogni anno un po' più tardi",
+    "da_controllare": []
+  },
+  {
+    "data": "2026-10-15",
+    "serie": "82_87_DF_DCCV_AVQ_FAMIGLIE_18|DATA_TYPE=HOUS_GHOUS_THINK,FREQ=A,MEASURE=HSC_F,NUMBER_HOUSEHOLD_COMP=TOT,REF_AREA=IT",
+    "flow": "82_87_DF_DCCV_AVQ_FAMIGLIE_18",
+    "filtri": {
+      "FREQ": "A",
+      "REF_AREA": "IT",
+      "DATA_TYPE": "HOUS_GHOUS_THINK",
+      "MEASURE": "HSC_F",
+      "NUMBER_HOUSEHOLD_COMP": "TOT"
+    },
+    "url": "https://esploradati.istat.it/SDMXWS/rest/data/82_87_DF_DCCV_AVQ_FAMIGLIE_18/A.IT.HOUS_GHOUS_THINK.HSC_F.TOT",
+    "sottotema": "casa_affitti",
+    "slot": "annuale",
+    "tipo_storia": "serie",
+    "grafico": "colonne",
+    "periodo": "2025",
+    "ultimo_valore": 8.8,
+    "copertina": "MASSIMO",
+    "numero": "9,6 per 100 famiglie",
+    "domanda": "Nel 2021 quasi una famiglia su 10 pensava di cambiare casa",
+    "titolo": "Il picco nel 2021, poi su e giù",
+    "da_controllare": []
+  },
+  {
+    "data": "2026-10-16",
+    "serie": "83_63_DF_DCCV_AVQ_PERSONE_224|AGE=Y_GE6,DATA_TYPE=6_ARCHEO_MUSEUM,EDU_LEV_HIGHEST=99,FREQ=A,LABOUR_PROFESS_STATUS_B=99,MEASURE=HSC,REF_AREA=IT,SEX=9",
+    "flow": "83_63_DF_DCCV_AVQ_PERSONE_224",
+    "filtri": {
+      "FREQ": "A",
+      "REF_AREA": "IT",
+      "DATA_TYPE": "6_ARCHEO_MUSEUM",
+      "MEASURE": "HSC",
+      "SEX": "9",
+      "AGE": "Y_GE6",
+      "EDU_LEV_HIGHEST": "99",
+      "LABOUR_PROFESS_STATUS_B": "99"
+    },
+    "url": "https://esploradati.istat.it/SDMXWS/rest/data/83_63_DF_DCCV_AVQ_PERSONE_224/A.IT.6_ARCHEO_MUSEUM.HSC.9.Y_GE6.99.99",
+    "sottotema": "cultura",
+    "slot": "annuale",
+    "tipo_storia": "serie",
+    "grafico": "linea",
+    "periodo": "2025",
+    "ultimo_valore": 32.3,
+    "copertina": "ULTIMO",
+    "numero": "32,3 per 100 persone",
+    "domanda": "Quasi una persona su tre ha visitato siti archeologici e monumenti",
+    "titolo": "Dal crollo del 2021 al record",
+    "da_controllare": []
   }
 ]

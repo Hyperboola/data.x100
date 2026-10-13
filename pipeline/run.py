@@ -47,7 +47,7 @@ from sources.rete import FonteNonDisponibile
 
 STORICO = ROOT / "storico.json"
 # Scadenze della cache, in giorni. I cataloghi si sovrascrivono da soli e non servono qui.
-SCADENZE_CACHE = {"dati": 7, "serie": 2, "struttura": 60}
+SCADENZE_CACHE = {"dati": 7, "serie": 35, "struttura": 120}  # serie: l'elenco letto dalla ricognizione
 SCADENZA_OUTPUT = 30
 TENTATIVI_ESPLORAZIONE = 4   # dataset provati per ogni giro
 MINUTI_PER_FASCIA = 10       # oltre, la fascia si salta: meglio un post in meno che un job infinito
@@ -105,7 +105,7 @@ def scarica(s: dict, cal: dict, forza: bool = False):
         valori = df["obs_value"].dropna().abs()
         massimo = 0 if (valori % 1 == 0).all() or valori.abs().max() >= 100 else (1 if valori.abs().max() >= 10 else 2)
         # mai più decimali di quelli che ISTAT pubblica: 9,6 resta 9,6 e non diventa 9,60
-        osservati = max(len(f"{v:.6f}".rstrip("0").split(".")[1]) for v in valori)
+        osservati = max((len(f"{v:.6f}".rstrip("0").split(".")[1]) for v in valori), default=0)
         s["decimali"] = min(massimo, osservati)
     ultimo = Periodo.da_codice(df["time_period"].max())
     if ultimo.frequenza != s["frequenza"]:
@@ -126,6 +126,15 @@ def varieta(storico: list[dict], chiave: str, n: int = 10) -> str:
             "meno di recente.")
 
 
+def stili_precedenti(storico: list[dict]) -> dict:
+    """L'ultimo stile di copertina usato e il grafico dell'ultima copertina con grafico (per non ripeterli)."""
+    con_stile = sorted((v for v in storico if v.get("stile")), key=lambda v: v["data"])
+    col_grafico = [v for v in con_stile if v["stile"].startswith("grafico")]
+    # i primi post (prima delle copertine a rotazione) erano tutti "numero su sfondo scuro"
+    return {"stile": con_stile[-1]["stile"] if con_stile else ("numero_scuro" if storico else None),
+            "grafico_copertina": col_grafico[-1]["grafico"] if col_grafico else None}
+
+
 def esegui(s: dict, cal: dict, usa_claude: bool = True, forza: bool = False,
            storico: list[dict] | None = None) -> tuple[list[Path], dict]:
     df, nomi = scarica(s, cal, forza)
@@ -140,7 +149,8 @@ def esegui(s: dict, cal: dict, usa_claude: bool = True, forza: bool = False,
     slides, testo_ig, rapporto = costruisci_carosello(s, df, cal["finestra"][s["frequenza"]], nomi=nomi,
                                                       usa_claude=usa_claude, precedente=precedente,
                                                       varieta=varieta(storico or [], "grafico"),
-                                                      revisione=cal.get("revisione", True))
+                                                      revisione=cal.get("revisione", True),
+                                                      stili_precedenti=stili_precedenti(storico or []))
     if precedente and all(o == "modello" for o in rapporto["origine"].values()):
         raise NonPubblicabile("senza i testi di Claude sarebbe uguale all'ultima volta")
 
@@ -163,7 +173,7 @@ def esegui(s: dict, cal: dict, usa_claude: bool = True, forza: bool = False,
         url = None
     voce = {"data": QUANDO.isoformat(), "serie": s["id"], "flow": s["flow"], "filtri": s["filtri"],
             "url": url, "sottotema": s["sottotema"], "slot": s["frequenza"], "tipo_storia": rapporto["tipo_storia"],
-            "grafico": scelte["grafico"], "periodo": df["time_period"].max(),
+            "grafico": scelte["grafico"], "stile": scelte.get("stile"), "periodo": df["time_period"].max(),
             "ultimo_valore": rapporto.get("ultimo_valore"), "copertina": scelte["copertina"],
             "numero": rapporto["menu"][scelte["copertina"]]["copertina"],
             "domanda": rapporto["testi"]["domanda"], "titolo": rapporto["testi"]["titolo_grafico"],
@@ -271,7 +281,8 @@ def _pubblica(s: dict, cal: dict, usa_claude: bool, storico: list[dict], creati:
 
 def _esplora(sott: str, slot: str, cal: dict, storico: list[dict], creati: list, pubblicati: list,
              usa_claude: bool = True, giri: int = TENTATIVI_ESPLORAZIONE) -> bool:
-    """Prima i dataset mai usati; solo se il sottotema li ha esauriti, quelli usati fuori dalla pausa."""
+    """Prima i dataset mai usati; poi le serie mai pubblicate dei dataset già usati; per ultime le serie già
+    pubblicate, fuori dalla pausa."""
     global _claude_finito, _istat_giu
     if _claude_finito or _istat_giu:
         return False
@@ -286,15 +297,20 @@ def _esplora(sott: str, slot: str, cal: dict, storico: list[dict], creati: list,
     mai = {v["flow"] for v in storico}
     recenti = {v["flow"] for v in storico if abs((QUANDO - date.fromisoformat(v["data"])).days) < pausa}
     falliti, inizio = set(), time.monotonic()  # dataset che oggi non vanno: non si riprovano
-    for esclusi, giro in ((mai, "dataset mai usati"), (recenti, "dataset già usati, fuori pausa")):
+    usate = {v["serie"] for v in storico}
+    giri_possibili = ((mai, usate, "dataset mai usati"),
+                      (set(), usate, "altra serie di un dataset già usato"),  # es. teatro dopo i musei
+                      (recenti, set(), "serie già usata, fuori pausa"))
+    for esclusi, serie_usate, giro in giri_possibili:
         provati = esclusi | falliti
+        extra = {} if usa_claude else {"serie_usate": serie_usate}
         for _ in range(giri):
             if time.monotonic() - inizio > MINUTI_PER_FASCIA * 60:
                 log.warning("%s/%s: superati %s minuti, salto la fascia", sott, slot, MINUTI_PER_FASCIA)
                 return False
             try:
                 trova = scegli if usa_claude else scegli_senza_claude
-                s = trova(sott, slot, cal, esclusi=provati, varieta=varieta(storico, "tipo_storia"))
+                s = trova(sott, slot, cal, esclusi=provati, varieta=varieta(storico, "tipo_storia"), **extra)
             except DatasetEsauriti:
                 break  # tutti usati: si passa al secondo giro
             except SerieNonValida as exc:  # quel dataset non va: se ne prova un altro

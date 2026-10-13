@@ -78,15 +78,26 @@ class Istat:
         if _fresco(codici, 30) and meta.exists():
             return pd.read_parquet(codici), json.loads(meta.read_text())
         # timeout corto e un solo tentativo: un dataset che non risponde in un minuto si salta
-        resp = self.client.richiesta(f"{SDMX}/dataflow/IT1/{flow}/{self._versione(flow)}", XML,
-                                     params={"references": "all"}, timeout=60, tentativi=1)
+        try:
+            resp = self.client.richiesta(f"{SDMX}/dataflow/IT1/{flow}/{self._versione(flow)}", XML,
+                                         params={"references": "all"}, timeout=60, tentativi=1)
+        except ErroreFonte:
+            if codici.exists() and meta.exists():  # le dimensioni di un dataset cambiano di rado:
+                log.info("%s: struttura non aggiornata, uso la copia salvata", flow)  # meglio la vecchia
+                return pd.read_parquet(codici), json.loads(meta.read_text())
+            raise
         df, info = _leggi_struttura(resp.content)
         codici.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(codici, index=False)
         meta.write_text(json.dumps(info, ensure_ascii=False))
         return df, info
 
-    def serie_disponibili(self, flow: str, filtri: dict | None = None) -> pd.DataFrame:
+    def serie_in_cache(self, flow: str, filtri: dict | None = None, max_giorni: int = 1) -> bool:
+        """C'è già l'elenco delle serie salvato (es. dalla ricognizione)? Allora non serve chiedere a ISTAT."""
+        nome = flow if not filtri else f"{flow}~{slug_filtri(filtri)}"
+        return _fresco(self.cartella / "serie" / f"{nome}.parquet", max_giorni)
+
+    def serie_disponibili(self, flow: str, filtri: dict | None = None, max_giorni: int = 1) -> pd.DataFrame:
         """Le serie che esistono davvero, con il loro ultimo periodo (cache 1 giorno).
 
         Una sola richiesta SDMX (lastNObservations=1): una riga per serie, una colonna per
@@ -96,7 +107,7 @@ class Istat:
         """
         nome = flow if not filtri else f"{flow}~{slug_filtri(filtri)}"
         path = self.cartella / "serie" / f"{nome}.parquet"
-        if _fresco(path, 1):
+        if _fresco(path, max_giorni):  # la pipeline accetta l'elenco della ricognizione; la ricognizione no
             return pd.read_parquet(path)
         url = self.url_dati(flow, filtri) if filtri else f"{SDMX}/data/{flow}"
         resp = self.client.richiesta(url, CSV, params={"lastNObservations": 1}, timeout=90, tentativi=1)

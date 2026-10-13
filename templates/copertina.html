@@ -18,12 +18,21 @@
 .didascalia { margin-top: 16px; font-size: 32px; line-height: 1.35; color: var(--testo-chiaro); max-width: 820px; }
 .piede { color: var(--grigio-chiaro); align-items: center; }
 .piede .scorri { color: var(--nebbia); font-weight: 500; white-space: nowrap; }
+/* Varianti di stile (stessi colori Data%, sfondi diversi): chiara e arancio */
+.slide.chiara .occhiello, .slide.chiara .piede { color: var(--grigio-nota); }
+.slide.chiara .didascalia { color: #3B4250; }
+.slide.chiara .piede .scorri, .slide.chiara .piede .pagina { color: var(--inchiostro); }
+.slide.arancio { background: var(--arancio); color: var(--inchiostro); }
+.slide.arancio .grande, .slide.arancio .unita-grande, .slide.arancio .didascalia { color: var(--inchiostro); }
+.slide.arancio .logo span { color: var(--nebbia); }
+.slide.arancio .occhiello, .slide.arancio .piede { color: var(--inchiostro); opacity: .75; }
+.slide.arancio .piede .scorri { color: var(--inchiostro); }
 {% endblock %}
 {% block body %}
 {# Il numero si rimpicciolisce se è lungo, così resta sempre su una riga #}
 {% set n = numero | length %}
 {% set size = 196 if n <= 10 else (160 if n <= 13 else 128) %}
-<div class="slide scura{{ ' reel' if formato == 'reel' }}">
+<div class="slide {{ tema | default('scura') }}{{ ' reel' if formato == 'reel' }}">
   <div class="testata">
     <div class="logo">Data<span>%</span></div>
     <div class="occhiello mono">{{ occhiello }}</div>
@@ -38,7 +47,8 @@
   </div>
   <div class="piede">
     <div class="fonte">{{ fonte }}</div>
-    {% if formato != "reel" %}<div class="scorri">Scorri →</div>{% endif %}
+    {% if pagina | default('') %}<div class="pagina">{{ pagina }}</div>
+    {% elif formato != "reel" %}<div class="scorri">Scorri →</div>{% endif %}
   </div>
 </div>
 {% endblock %}

@@ -36,9 +36,14 @@ PAUSA_IRRAGGIUNGIBILE = 10 * 60  # se ISTAT non si raggiunge per un po' di datas
 PAUSE_MASSIME = 6                 # dopo un'ora di tentativi a vuoto ci si ferma (si riparte da lì rilanciando)
 
 
-def _gia_letto(m: dict | None) -> bool:
-    """In memoria con una lettura valida e recente (un timeout isolato non conta)."""
-    return bool(m) and _eta_memoria(m) <= MEMORIA_GIORNI and (m.get("lento") or "controllate" in m)
+def _gia_letto(m: dict | None, aggiornato=None) -> bool:
+    """In memoria con una lettura valida (un timeout isolato non conta) e ancora attuale: fatta da meno di 30
+    giorni, oppure dopo l'ultimo aggiornamento del dataset secondo il catalogo ISTAT (niente di nuovo da leggere)."""
+    if not m or not (m.get("lento") or "controllate" in m):
+        return False
+    if _eta_memoria(m) <= MEMORIA_GIORNI:
+        return True
+    return not m.get("lento") and pd.notna(aggiornato) and pd.Timestamp(aggiornato).date().isoformat() <= m["verificato"]
 
 
 def _elenco(cal: dict, sottotemi: list[str], istat: Istat) -> pd.DataFrame:
@@ -50,8 +55,9 @@ def _elenco(cal: dict, sottotemi: list[str], istat: Istat) -> pd.DataFrame:
         except Exception as exc:  # categoria sparita dal catalogo o simili: si segnala e si va avanti
             log.warning("%s: impossibile elencare i dataset (%s)", sott, exc)
             continue
-        righe.append(c.assign(sottotema=sott)[["sottotema", "dataset", "titolo"]])
-    return pd.concat(righe, ignore_index=True) if righe else pd.DataFrame(columns=["sottotema", "dataset", "titolo"])
+        righe.append(c.assign(sottotema=sott)[["sottotema", "dataset", "titolo", "last_update"]])
+    colonne = ["sottotema", "dataset", "titolo", "last_update"]
+    return pd.concat(righe, ignore_index=True) if righe else pd.DataFrame(columns=colonne)
 
 
 def _leggi(istat: Istat, memoria: dict, flow: str) -> str:
@@ -87,7 +93,8 @@ def riepilogo(cal: dict, elenco: pd.DataFrame) -> None:
     totali = {"dataset": 0, "letti": 0, **{f: 0 for f in fasce}, "nuovi": 0}
     for sott, g in elenco.groupby("sottotema", sort=False):
         flows = list(dict.fromkeys(g["dataset"]))
-        letti = sum(_gia_letto(memoria.get(f)) for f in flows)
+        aggiornati = dict(zip(g["dataset"], g["last_update"]))
+        letti = sum(_gia_letto(memoria.get(f), aggiornati.get(f)) for f in flows)
         freschi = {f: {d for d in flows if _noto_fresco(memoria, d, f, cal["freschezza"][f])} for f in fasce}
         nuovi = len(set().union(*freschi.values()) - usati)
         print(f"{sott:24} {len(flows):7} {letti:6} " + " ".join(f"{len(freschi[f]):10}" for f in fasce)
@@ -123,9 +130,13 @@ def main() -> None:
         return
 
     memoria = _memoria()
-    flows = list(dict.fromkeys(elenco["dataset"]))  # un dataset può stare in più sottotemi: si legge una volta
+    # a turno: il 1° dataset di ogni sottotema, poi il 2° di ognuno... Se ISTAT si ferma a metà, tutti i
+    # sottotemi (e quindi tutti i giorni della settimana) hanno già qualcosa in memoria
+    a_turno = elenco.assign(_n=elenco.groupby("sottotema").cumcount()).sort_values("_n", kind="stable")
+    flows = list(dict.fromkeys(a_turno["dataset"]))  # un dataset può stare in più sottotemi: si legge una volta
     titoli = dict(zip(elenco["dataset"], elenco["titolo"].fillna("")))
-    da_leggere = [f for f in flows if args.rifai or not _gia_letto(memoria.get(f))]
+    aggiornati = dict(zip(elenco["dataset"], elenco["last_update"]))
+    da_leggere = [f for f in flows if args.rifai or not _gia_letto(memoria.get(f), aggiornati.get(f))]
     stima = timedelta(seconds=len(da_leggere) * SECONDI_A_DATASET)
     log.info("%s dataset nel calendario, %s già in memoria, %s da leggere (circa %s, fine verso le %s)",
              len(flows), len(flows) - len(da_leggere), len(da_leggere), str(stima).split(".")[0],

@@ -5,7 +5,9 @@ Requisito una tantum: python -m playwright install chromium
 """
 from __future__ import annotations
 
+import logging
 import math
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -26,6 +28,27 @@ FORMATI = {
     "reel": {"larghezza": 1080, "altezza": 1920, "suffisso": "_reel"},
 }
 OUTPUT_DIR = ROOT / "output"
+# output/AAAA/MM/GG/ con i file divisi per uso. Il resto del codice chiama i giorni "AAAA-MM-GG" e usa solo
+# queste funzioni per arrivare ai file.
+POST, REEL, VIDEO, ALTRI = "post", "reel", "video", "altri"  # slide 4:5 · slide 9:16 · video · rapporto e testi
+
+
+def cartella_giorno(giorno) -> Path:
+    """'2026-10-19' (o una date) → output/2026/10/19."""
+    anno, mese, gg = str(giorno).split("-")
+    return OUTPUT_DIR / anno / mese / gg
+
+
+def giorno_di(path: Path) -> str:
+    """Il giorno 'AAAA-MM-GG' di un file dentro output/AAAA/MM/GG/<sottocartella>/."""
+    gg, mese, anno = path.parent.parent.parts[-1], path.parent.parent.parts[-2], path.parent.parent.parts[-3]
+    return f"{anno}-{mese}-{gg}"
+
+
+def giorni_in_output() -> list[str]:
+    """Tutti i giorni che hanno almeno un post, dal più vecchio."""
+    return sorted(f"{d.parent.parent.name}-{d.parent.name}-{d.name}" for d in OUTPUT_DIR.glob("[0-9]" * 4 + "/[0-9][0-9]/[0-9][0-9]")
+                  if any((d / ALTRI).glob("*_rapporto.json")))
 TEMPLATES = ROOT / "templates"
 
 _env = Environment(loader=FileSystemLoader(TEMPLATES), undefined=StrictUndefined, autoescape=True)
@@ -122,6 +145,7 @@ def grafico(
         barre.append(
             {
                 "etichetta": etichetta if (forma == "orizzontale" or i % passo == 0) else "",
+                "periodo": etichetta,
                 "testo": (testi_valori[i] if testi_valori else _etichetta(v, decimali, unita, forma)) if ok else "",
                 "pct": scala(v) if ok else 0,
                 "x": round((i + 0.5) / n * 100, 2),  # centro della colonna: allinea punti ed etichette
@@ -251,11 +275,12 @@ _CHECK_JS = """([larghezza, altezza]) => {
 
 
 def render(slides: list[tuple[str, dict]], nome: str, out_dir: Path = OUTPUT_DIR,
-           salva_html: bool = False, formati: tuple[str, ...] = ("post", "reel")) -> list[Path]:
+           salva_html: bool = False, formati: tuple[str, ...] = ("post", "reel"), video: bool = True) -> list[Path]:
     """Trasforma una lista di slide in JPEG, in ogni formato richiesto.
 
-    post: 1080×1440 -> nome_1.jpg, nome_2.jpg, ...
-    reel: 1080×1920 -> nome_reel_1.jpg, nome_reel_2.jpg, ...
+    out_dir è la cartella del giorno (output/AAAA/MM/GG): i file finiscono nelle sue sottocartelle.
+    post: 1080×1350 -> post/nome_1.jpg, post/nome_2.jpg, ...
+    reel: 1080×1920 -> reel/nome_reel_1.jpg, ...   video: video/nome_video.mp4
     Le slide sono le stesse (stessi dati, stessi testi): cambia solo la tela, quindi ogni
     rigenerazione dalla redazione aggiorna insieme post e reel.
 
@@ -263,8 +288,9 @@ def render(slides: list[tuple[str, dict]], nome: str, out_dir: Path = OUTPUT_DIR
     (con salva_html=True resta accanto ai JPEG, utile per ritoccare il CSS).
     Se qualcosa esce dai bordi, solleva un errore invece di produrre una slide rotta.
     """
-    out_dir = Path(out_dir).resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(out_dir).resolve()  # la cartella del giorno: i file vanno nelle sue sottocartelle
+    for sotto in (POST, REEL, VIDEO):
+        (out_dir / sotto).mkdir(parents=True, exist_ok=True)
     common = {
         "fonts": {
             "bricolage": font_path("BricolageGrotesque.ttf").as_uri(),
@@ -293,10 +319,59 @@ def render(slides: list[tuple[str, dict]], nome: str, out_dir: Path = OUTPUT_DIR
                     problemi = page.evaluate(_CHECK_JS, [f["larghezza"], f["altezza"]])
                     if problemi:
                         raise ValueError(f"Slide {i} ({template}, {formato}) non sta nei bordi: {sorted(set(problemi))}")
-                    jpg = out_dir / f"{base}.jpg"
+                    jpg = out_dir / (REEL if formato == "reel" else POST) / f"{base}.jpg"
                     page.screenshot(path=str(jpg), type="jpeg", quality=95)
                     paths.append(jpg)
                 page.close()
+            if "reel" in formati and video:
+                if mp4 := _video(browser, slides, out_dir / VIDEO / f"{nome}_video.mp4", common, Path(temporanea)):
+                    paths.append(mp4)
         finally:
             browser.close()
     return paths
+
+
+log = logging.getLogger(__name__)
+VIDEO_FPS, VIDEO_SECONDI = 30, 12  # intro 1 s · il grafico che cresce 6 s · la notizia 3 s · chiusura 2 s
+VIDEO_FORME = ("linea", "area", "colonne", "orizzontale")
+
+
+def _video(browser, slides: list, destinazione: Path, common: dict, temporanea: Path) -> Path | None:
+    """Video verticale (1080×1920, MP4) del grafico che si costruisce periodo dopo periodo, per reel e TikTok.
+    Usa gli stessi dati e testi della slide del grafico. None se il grafico non si anima (più linee, ciambella)
+    o se manca imageio-ffmpeg."""
+    grafico = next((d for t, d in slides if t == "grafico.html"), None)
+    numero = next((d for t, d in slides if t == "copertina.html"), None)
+    if not grafico or not numero or grafico.get("forma") not in VIDEO_FORME:
+        return None
+    try:
+        import imageio_ffmpeg
+    except ImportError:
+        log.warning("Video non creato: manca imageio-ffmpeg (pip install imageio-ffmpeg)")
+        return None
+    in_copertina = grafico.get("copertina")  # con il grafico in copertina i due titoli sono scambiati
+    # lo sfondo segue la copertina del post; l'arancione no, perché l'accento arancione sparirebbe
+    tema = "chiara" if slides[0][1].get("tema") == "chiara" else "scura"
+    html = _env.get_template("video.html").render(
+        **common, formato="reel", larghezza=1080, altezza=1920, occhiello=grafico["occhiello"], tema=tema,
+        titolo=grafico["titolo"] if in_copertina else numero["titolo"],
+        finale=numero["titolo"] if in_copertina else grafico["titolo"], fonte=grafico["fonte"],
+        dati={"barre": grafico["barre"], "forma": grafico["forma"], "riferimento": grafico.get("riferimento")})
+    pagina_html = temporanea / "video.html"
+    pagina_html.write_text(html, encoding="utf-8")
+    page = browser.new_page(viewport={"width": 1080, "height": 1920}, device_scale_factor=1)
+    page.goto(pagina_html.as_uri())
+    page.evaluate("document.fonts.ready.then(() => true)")
+    comando = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-f", "image2pipe",
+               "-framerate", str(VIDEO_FPS), "-c:v", "mjpeg", "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+               "-crf", "20", "-movflags", "+faststart", str(destinazione)]
+    ffmpeg = subprocess.Popen(comando, stdin=subprocess.PIPE)
+    try:
+        for f in range(VIDEO_FPS * VIDEO_SECONDI):
+            page.evaluate(f"frame({f / VIDEO_FPS})")
+            ffmpeg.stdin.write(page.screenshot(type="jpeg", quality=92))
+    finally:
+        ffmpeg.stdin.close()
+        ffmpeg.wait()
+        page.close()
+    return destinazione if ffmpeg.returncode == 0 else None

@@ -29,7 +29,7 @@ import pandas as pd
 
 from pipeline.calendario import carica_calendario
 from pipeline.claude import chiedi, prompt
-from pipeline.disegna import OUTPUT_DIR, render
+from pipeline.disegna import ALTRI, POST, REEL, VIDEO, cartella_giorno, giorni_in_output, giorno_di, render
 from pipeline.racconta import GRAFICI, GRUPPI, STILI, _completezza, costruisci_carosello, numeri, pulisci
 from pipeline.run import STORICO, scarica
 from pipeline.scegli import _soggetto_unita, filtri_ricognizione, serie_fresche
@@ -60,11 +60,11 @@ log = logging.getLogger(__name__)
 
 # --- File dei post ----------------------------------------------------------------------------------
 def giorni_disponibili() -> list[str]:
-    return sorted(d.name for d in OUTPUT_DIR.glob("????-??-??") if any(d.glob("*_rapporto.json")))
+    return giorni_in_output()
 
 
 def post_del_giorno(giorno: str) -> list[Path]:
-    return sorted((OUTPUT_DIR / giorno).glob("*_rapporto.json"))
+    return sorted((cartella_giorno(giorno) / ALTRI).glob("*_rapporto.json"))
 
 
 def _leggi(path: Path) -> dict:
@@ -116,7 +116,7 @@ def _ricostruisci(path: Path, s: dict, df: pd.DataFrame, nomi: dict, imposto: di
     slides, testo_ig, nuovo = costruisci_carosello({**s, "_post_esistente": True}, df, cal["finestra"][s["frequenza"]],
                                                    nomi=nomi, usa_claude=False, imposto=imposto)
     nome = path.name.removesuffix("_rapporto.json")
-    render(slides, nome=nome, out_dir=path.parent)
+    render(slides, nome=nome, out_dir=path.parent.parent)  # la cartella del giorno
     didascalia = _file(path, "_didascalia.txt")
     vecchia = didascalia.read_text(encoding="utf-8") if didascalia.exists() else ""
     didascalia.write_text(testo_ig, encoding="utf-8")
@@ -142,7 +142,7 @@ def _aggiorna_storico(path: Path, vecchio_id: str, **campi) -> None:
         return
     voci = json.loads(STORICO.read_text())
     for v in voci:
-        if v.get("serie") == vecchio_id and v.get("data") == path.parent.name:
+        if v.get("serie") == vecchio_id and v.get("data") == giorno_di(path):
             v.update(campi)
     STORICO.write_text(json.dumps(voci, ensure_ascii=False, indent=2))
 
@@ -341,12 +341,17 @@ def pagina(giorno: str, messaggi: dict[str, str]) -> str:
         rap = _leggi(path)
         nome = path.name.removesuffix("_rapporto.json")
         ver = int(path.stat().st_mtime)
-        slide = "".join(f'<img src="/img/{giorno}/{nome}_{i}.jpg?v={ver}">' for i in (1, 2, 3))
-        if (path.parent / f"{nome}_reel_1.jpg").exists():
-            reel = "".join(f'<img src="/img/{giorno}/{nome}_reel_{i}.jpg?v={ver}">' for i in (1, 2, 3))
+        cartella = path.parent.parent
+        slide = "".join(f'<img src="/img/{giorno}/{POST}/{nome}_{i}.jpg?v={ver}">' for i in (1, 2, 3))
+        if (cartella / REEL / f"{nome}_reel_1.jpg").exists():
+            reel = "".join(f'<img src="/img/{giorno}/{REEL}/{nome}_reel_{i}.jpg?v={ver}">' for i in (1, 2, 3))
             reel = f'<div class="formato">Reel 9:16</div><div class="slide reel">{reel}</div>'
         else:  # post creato prima dei reel: si generano al primo "Salva e rigenera"
             reel = '<div class="formato">Reel 9:16: premi "Salva e rigenera" per crearli.</div>'
+        if (cartella / VIDEO / f"{nome}_video.mp4").exists():  # il grafico animato, per reel e TikTok
+            reel += (f'<div class="formato">Video del grafico (MP4)</div>'
+                     f'<video controls playsinline preload="metadata" style="width:24%;border-radius:8px" '
+                     f'src="/img/{giorno}/{VIDEO}/{nome}_video.mp4?v={ver}"></video>')
         slide = f'<div class="formato">Post 3:4</div><div class="slide">{slide}</div>{reel}'
         avvisi = "".join(f'<div class="avviso">⚠ {html.escape(a)}</div>' for a in rap.get("da_controllare") or [])
         if rap.get("origine") and set(rap["origine"].values()) == {"modello"}:
@@ -389,7 +394,7 @@ def pagina(giorno: str, messaggi: dict[str, str]) -> str:
 
 
 def pagina_serie(giorno: str, file: str, errore: str = "") -> str:
-    path = OUTPUT_DIR / giorno / Path(file).name
+    path = cartella_giorno(giorno) / ALTRI / Path(file).name
     rap = _leggi(path)
     try:
         opzioni = opzioni_serie(path)
@@ -421,6 +426,7 @@ def avvia(giorno: str, porta: int = PORTA) -> None:
         def _invia(self, codice: int, corpo: bytes, tipo: str, extra: dict | None = None) -> None:
             self.send_response(codice)
             self.send_header("Content-Type", tipo)
+            self.send_header("Content-Length", str(len(corpo)))
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
             self.end_headers()
@@ -433,10 +439,21 @@ def avvia(giorno: str, porta: int = PORTA) -> None:
             url = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
             if url.path.startswith("/img/"):
-                _, _, g, file = url.path.split("/", 3)
-                f = OUTPUT_DIR / Path(g).name / Path(unquote(file)).name  # solo file di output
+                parti = url.path.split("/")  # /img/AAAA-MM-GG/<sottocartella>/<file>
+                if len(parti) != 5 or parti[3] not in (POST, REEL, VIDEO):
+                    return self._invia(404, b"", "text/plain")
+                f = cartella_giorno(Path(parti[2]).name) / parti[3] / Path(unquote(parti[4])).name  # solo output
                 if f.suffix == ".jpg" and f.exists():
                     return self._invia(200, f.read_bytes(), "image/jpeg", {"Cache-Control": "no-store"})
+                if f.suffix == ".mp4" and f.exists():  # Safari chiede i video a pezzi (Range): si rispetta
+                    dati, intervallo = f.read_bytes(), self.headers.get("Range", "")
+                    if intervallo.startswith("bytes="):
+                        da, _, a = intervallo[6:].partition("-")
+                        da, a = int(da or 0), min(int(a) if a else len(dati) - 1, len(dati) - 1)
+                        return self._invia(206, dati[da:a + 1], "video/mp4", {
+                            "Content-Range": f"bytes {da}-{a}/{len(dati)}", "Accept-Ranges": "bytes",
+                            "Cache-Control": "no-store"})
+                    return self._invia(200, dati, "video/mp4", {"Accept-Ranges": "bytes", "Cache-Control": "no-store"})
                 return self._invia(404, b"", "text/plain")
             if url.path == "/serie":
                 return self._html(pagina_serie(q.get("giorno", giorno), q.get("file", "")))
@@ -446,7 +463,7 @@ def avvia(giorno: str, porta: int = PORTA) -> None:
             dati = {k: v[0] for k, v in parse_qs(self.rfile.read(int(self.headers.get("Content-Length", 0))).decode(),
                                                    keep_blank_values=True).items()}
             g = Path(dati.get("giorno", giorno)).name
-            path = OUTPUT_DIR / g / Path(dati.get("file", "")).name
+            path = cartella_giorno(g) / ALTRI / Path(dati.get("file", "")).name
             nome = path.name.removesuffix("_rapporto.json")
             torna = {"Location": f"/?giorno={g}#{nome}"}
             if self.path == "/suggerisci":

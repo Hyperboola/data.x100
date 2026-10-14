@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{# Video del grafico (1080×1920): un'unica pagina che frame(t) porta allo stato dell'istante t, in secondi.
+   I dati sono quelli della slide del grafico: niente viene ricalcolato o inventato. #}
+{% block style %}
+.v { width: 1080px; height: 1920px; padding: 220px 96px 340px; display: flex; flex-direction: column; gap: 40px;
+     background: var(--inchiostro); color: var(--nebbia); }
+.v .testata { display: flex; justify-content: space-between; align-items: flex-start; }
+.v .occhiello { font-size: 22px; color: var(--grigio-chiaro); }
+.v .titolo { font-size: 68px; line-height: 1.05; }
+.v .contatore { display: flex; align-items: baseline; gap: 28px; min-height: 170px; }
+.v .contatore .numero { font-size: 150px; line-height: .9; letter-spacing: -5px; color: var(--arancio); }
+.v .contatore .periodo { font-family: "IBM Plex Mono", monospace; font-size: 34px; color: var(--grigio-chiaro); }
+.v .grafico { flex: 1; position: relative; min-height: 0; }
+.v svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.v .finale { font-family: "Bricolage Grotesque", sans-serif; font-weight: 600; font-size: 52px; line-height: 1.1;
+             letter-spacing: -1.5px; min-height: 120px; }
+.v .piede { color: var(--grigio-chiaro); }
+.v .cta { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
+          gap: 28px; background: var(--inchiostro); text-align: center; opacity: 0; }
+/* Video chiaro, quando la copertina del post è chiara: stessi colori, invertiti */
+.v.chiara, .v.chiara .cta { background: var(--nebbia); color: var(--inchiostro); }
+.v.chiara .occhiello, .v.chiara .contatore .periodo, .v.chiara .piede, .v.chiara .cta .riga { color: var(--grigio-nota); }
+.v .cta .logo { font-size: 120px; }
+.v .cta .riga { font-family: "IBM Plex Mono", monospace; font-size: 34px; color: var(--grigio-chiaro); }
+{% endblock %}
+{% block body %}
+<div class="v {{ tema }}" style="position: relative">
+  <div class="testata"><div class="logo">Data<span>%</span></div><div class="occhiello mono">{{ occhiello }}</div></div>
+  <div class="titolo" id="titolo">{{ titolo }}</div>
+  <div class="contatore"><div class="numero" id="valore"></div><div class="periodo" id="periodo"></div></div>
+  <div class="grafico" id="grafico"><svg id="svg"></svg></div>
+  <div class="finale" id="finale">{{ finale }}</div>
+  <div class="piede"><div class="fonte">{{ fonte }}</div></div>
+  <div class="cta" id="cta"><div class="logo">Data<span>%</span></div><div class="riga">Segui @data.x100 · un dato al giorno</div></div>
+</div>
+<script>
+const D = {{ dati | tojson }};
+const CHIARO = {{ "true" if tema == "chiara" else "false" }};
+// testo: linee, assi e scritte · fondo: il colore dello sfondo (bordo del punto evidenziato)
+const C = {testo: CHIARO ? "{{ c.INCHIOSTRO }}" : "{{ c.NEBBIA }}", fondo: CHIARO ? "{{ c.NEBBIA }}" : "{{ c.INCHIOSTRO }}",
+           arancio: "{{ c.ARANCIO }}", grigio: CHIARO ? "{{ c.GRIGIO_NOTA }}" : "#A9B3C2", barre: "{{ c.GRIGIO_BARRE }}"};
+const T = {intro: 1.0, crescita: 6.0, notizia: 3.0, chiusura: 2.0};
+const svg = document.getElementById("svg"), box = document.getElementById("grafico");
+const W = box.clientWidth, H = box.clientHeight, NS = "http://www.w3.org/2000/svg";
+const punti = D.barre.filter(b => b.testo !== "");
+const n = punti.length, orizz = D.forma === "orizzontale";
+const facile = x => 1 - Math.pow(1 - Math.min(Math.max(x, 0), 1), 3);  // parte veloce, arriva morbida
+
+function el(tag, attr, testo) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attr) e.setAttribute(k, attr[k]);
+  if (testo !== undefined) e.textContent = testo;
+  svg.appendChild(e); return e;
+}
+const BASE = H - 60;                                   // spazio sotto per le etichette dei periodi
+const px = b => b.x / 100 * W, py = b => BASE - b.pct / 100 * (BASE - 40);
+
+function frame(t) {
+  svg.innerHTML = "";
+  const fine_crescita = T.intro + T.crescita, fine_notizia = fine_crescita + T.notizia;
+  // fino a quale punto (anche a metà) siamo arrivati; durante l'apertura non è ancora partito niente
+  const p = t < T.intro ? -1 : facile((t - T.intro) / T.crescita) * (n - 1);
+  const k = Math.max(0, Math.min(n - 1, Math.round(p)));
+  const notizia = t >= fine_crescita;
+  document.getElementById("titolo").style.opacity = Math.min(1, t / 0.5);
+  document.getElementById("finale").style.opacity = notizia ? Math.min(1, (t - fine_crescita) / 0.5) : 0;
+  document.getElementById("cta").style.opacity = Math.min(1, Math.max(0, (t - fine_notizia) / 0.4));
+  if (orizz) return orizzontale(t, notizia);
+
+  // contatore: il punto raggiunto; durante la notizia, il punto evidenziato
+  const mostrato = notizia ? (punti.find(b => b.evidenzia) || punti[n - 1]) : punti[k];
+  document.getElementById("valore").textContent = t < T.intro ? "" : mostrato.testo;
+  document.getElementById("periodo").textContent = t < T.intro ? "" : mostrato.periodo;
+
+  el("line", {x1: 0, x2: W, y1: BASE, y2: BASE, stroke: C.testo, "stroke-width": 2});
+  punti.forEach((b, i) => { if (b.etichetta) el("text", {x: px(b), y: BASE + 44, fill: C.grigio, "font-size": 24,
+    "text-anchor": "middle", "font-family": "IBM Plex Mono"}, b.etichetta); });
+  if (D.riferimento && notizia) {
+    const y = BASE - D.riferimento.pct / 100 * (BASE - 40);
+    el("line", {x1: 0, x2: W, y1: y, y2: y, stroke: C.grigio, "stroke-width": 2, "stroke-dasharray": "8 8"});
+  }
+  if (D.forma === "colonne") {
+    const larga = W / n * 0.72;
+    punti.forEach((b, i) => {
+      const h = (BASE - py(b)) * facile(p - i + 1);
+      if (h <= 0) return;
+      const accesa = notizia ? b.evidenzia : i === k;
+      el("rect", {x: px(b) - larga / 2, y: BASE - h, width: larga, height: h, fill: accesa ? C.arancio : C.barre});
+    });
+    return;
+  }
+  // linea e area: si disegna fino al punto p, interpolando dentro il tratto corrente
+  const tratto = punti.slice(0, Math.floor(p) + 1).map(b => [px(b), py(b)]);
+  const fraz = p - Math.floor(p), dopo = punti[Math.floor(p) + 1];
+  if (dopo && fraz > 0) { const a = tratto[tratto.length - 1];
+    tratto.push([a[0] + (px(dopo) - a[0]) * fraz, a[1] + (py(dopo) - a[1]) * fraz]); }
+  if (t < T.intro) return;
+  if (D.forma === "area" && tratto.length > 1)
+    el("polygon", {points: [[tratto[0][0], BASE], ...tratto, [tratto[tratto.length - 1][0], BASE]].map(q => q.join(",")).join(" "),
+                   fill: C.barre, opacity: .35});
+  el("polyline", {points: tratto.map(q => q.join(",")).join(" "), fill: "none", stroke: C.testo, "stroke-width": 6,
+                  "stroke-linejoin": "round", "stroke-linecap": "round"});
+  punti.slice(0, Math.floor(p) + 1).forEach(b => el("circle", {cx: px(b), cy: py(b), r: 8, fill: C.testo}));
+  const testa = notizia ? (punti.find(b => b.evidenzia) || punti[n - 1]) : null;
+  const q = testa ? [px(testa), py(testa)] : tratto[tratto.length - 1];
+  el("circle", {cx: q[0], cy: q[1], r: notizia ? 22 : 16, fill: C.arancio, stroke: C.fondo, "stroke-width": 6});
+}
+
+function orizzontale(t, notizia) {
+  // classifica: le barre crescono una dopo l'altra, dalla prima all'ultima
+  const riga = Math.min(110, (H - 20) / n - 24), passo = riga + 24, etich = 300;
+  const sopra = Math.max(0, (H - n * passo) / 2);              // la classifica al centro dello spazio
+  const p = t < T.intro ? 0 : facile((t - T.intro) / T.crescita) * n;
+  const k = Math.max(0, Math.min(n - 1, Math.ceil(p) - 1));
+  const mostrato = notizia ? (punti.find(b => b.evidenzia) || punti[0]) : punti[k];
+  document.getElementById("valore").textContent = t < T.intro ? "" : mostrato.testo;
+  document.getElementById("periodo").textContent = t < T.intro ? "" : mostrato.periodo;
+  punti.forEach((b, i) => {
+    const y = sopra + i * passo, cresci = facile(p - i), spazio = W - etich - 170;
+    const w = Math.min(spazio, spazio * b.pct / 70) * cresci;
+    el("text", {x: 0, y: y + riga / 2 + 12, fill: C.testo, "font-size": 34, "font-weight": 600}, b.periodo);
+    if (w > 0) el("rect", {x: etich, y, width: w, height: riga, fill: (notizia ? b.evidenzia : i === k) ? C.arancio : C.barre});
+    if (cresci >= 1) el("text", {x: etich + w + 18, y: y + riga / 2 + 14, fill: C.testo, "font-size": 38,
+                                 "font-weight": 800, "font-family": "Bricolage Grotesque"}, b.testo);
+  });
+}
+frame(0);
+</script>
+{% endblock %}

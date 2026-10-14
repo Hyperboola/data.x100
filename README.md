@@ -40,7 +40,12 @@ data_x100/
 ├── pipeline/         run · categorie · scegli · racconta · disegna · redazione · storico · claude · calendario · periodi
 ├── config.py
 ├── data/             cache e storico (non versionato)
-└── output/           caroselli del giorno + riepilogo.md con le didascalie (non versionato)
+└── output/           i post, un giorno per cartella (non versionato):
+    └── AAAA/MM/GG/
+        ├── post/      slide del carosello (4:5)
+        ├── reel/      le stesse slide in verticale (9:16)
+        ├── video/     il video del grafico (MP4)
+        └── altri/     rapporto, dati, didascalia e riepilogo.md
 ```
 
 ## Comandi
@@ -84,3 +89,5 @@ python -m playwright install chromium
 ```
 
 Serve anche Claude Code (`claude --version`) collegato al proprio abbonamento.
+
+Ogni post esce in tre forme: le slide del post (4:5), le stesse slide per i reel (9:16) e un **video MP4 del grafico** che si costruisce periodo dopo periodo (`*_video.mp4`, 12 secondi, per reel e TikTok). Il video usa gli stessi dati della slide e si rigenera con "Salva e rigenera" in redazione. Serve `imageio-ffmpeg` (è in requirements.txt); i grafici a più linee e la ciambella non hanno il video.

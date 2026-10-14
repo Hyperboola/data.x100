@@ -18,7 +18,7 @@ Le fasce (annuale, trimestrale, mensile) si alternano. Per ogni post:
 Ogni dataset si usa una volta; una serie già uscita torna solo con un dato nuovo o dopo la pausa.
 
 Tutto ciò che esce viene salvato in storico.json (versionato: è la memoria della pagina).
-Risultato in output/<giorno di pubblicazione>/: per ogni post tre JPEG, didascalia, rapporto e
+Risultato in output/AAAA/MM/GG/ (giorno di pubblicazione): post/, reel/, video/ e altri/ con didascalia, rapporto e
 dati, più riepilogo.md. Poi: python -m pipeline.redazione per rivedere, scrivere e approvare.
 """
 from __future__ import annotations
@@ -37,7 +37,7 @@ from pathlib import Path
 from config import ROOT
 from pipeline.calendario import GIORNI, carica_calendario, carica_preferiti
 from pipeline.claude import riepilogo_consumi
-from pipeline.disegna import OUTPUT_DIR, render
+from pipeline.disegna import ALTRI, OUTPUT_DIR, POST, cartella_giorno, render
 from pipeline.periodi import Periodo
 from pipeline.racconta import costruisci_carosello
 from pipeline.scegli import (DatasetEsauriti, NessunaSerie, SerieNonValida, fascia_esaurita, pulisci_nome, scegli,
@@ -154,14 +154,16 @@ def esegui(s: dict, cal: dict, usa_claude: bool = True, forza: bool = False,
     if precedente and all(o == "modello" for o in rapporto["origine"].values()):
         raise NonPubblicabile("senza i testi di Claude sarebbe uguale all'ultima volta")
 
-    out = OUTPUT_DIR / QUANDO.isoformat()
+    out = cartella_giorno(QUANDO)
+    altri = out / ALTRI
+    altri.mkdir(parents=True, exist_ok=True)
     nome = _nome_file(s, out)
     paths = render(slides, nome=nome, out_dir=out)
-    (out / f"{nome}_didascalia.txt").write_text(testo_ig, encoding="utf-8")
+    (altri / f"{nome}_didascalia.txt").write_text(testo_ig, encoding="utf-8")
     # i dati esatti del post: la redazione rigenera da questi, senza chiedere niente a ISTAT
-    (out / f"{nome}_dati.json").write_text(json.dumps({"righe": df.to_dict("records"), "nomi": nomi},
+    (altri / f"{nome}_dati.json").write_text(json.dumps({"righe": df.to_dict("records"), "nomi": nomi},
                                                       ensure_ascii=False, default=str), encoding="utf-8")
-    (out / f"{nome}_rapporto.json").write_text(json.dumps({"serie": s, **rapporto}, ensure_ascii=False, indent=2),
+    (altri / f"{nome}_rapporto.json").write_text(json.dumps({"serie": s, **rapporto}, ensure_ascii=False, indent=2),
                                                 encoding="utf-8")
     scelte = rapporto["scelte"]
     log.info("%s: storia %s di %s, grafico %s, copertina %s", s["id"], rapporto["tipo_storia"],
@@ -180,7 +182,7 @@ def esegui(s: dict, cal: dict, usa_claude: bool = True, forza: bool = False,
             "da_controllare": rapporto.get("da_controllare") or []}
     if voce["da_controllare"]:
         log.warning("⚠ %s da controllare prima di pubblicare: %s", nome, "; ".join(voce["da_controllare"]))
-    return paths + [out / f"{nome}_didascalia.txt", out / f"{nome}_rapporto.json"], voce
+    return paths + [altri / f"{nome}_didascalia.txt", altri / f"{nome}_rapporto.json"], voce
 
 
 def _nome_file(s: dict, cartella: Path) -> str:
@@ -193,7 +195,7 @@ def _nome_file(s: dict, cartella: Path) -> str:
         argomento = f"{argomento}-{parola}" if argomento else parola
     nome = f"{s['frequenza']}_{s['sottotema']}_{argomento}"
     n = 2
-    while (cartella / f"{nome}_1.jpg").exists():  # due post sullo stesso argomento nello stesso giorno
+    while (cartella / POST / f"{nome}_1.jpg").exists():  # due post sullo stesso argomento nello stesso giorno
         nome = f"{s['frequenza']}_{s['sottotema']}_{argomento}_{n}"
         n += 1
     return nome
@@ -203,10 +205,14 @@ def _nome_file(s: dict, cartella: Path) -> str:
 def pulizia() -> None:
     """All'avvio: via la cache scaduta e i caroselli vecchi. Lo storico non si tocca mai."""
     tolti = Istat().pulisci(SCADENZE_CACHE)
-    for cartella in OUTPUT_DIR.glob("????-??-??"):
-        if (date.today() - date.fromisoformat(cartella.name)).days > SCADENZA_OUTPUT:
+    for cartella in OUTPUT_DIR.glob("[0-9]" * 4 + "/[0-9][0-9]/[0-9][0-9]"):  # output/AAAA/MM/GG
+        giorno = date(int(cartella.parent.parent.name), int(cartella.parent.name), int(cartella.name))
+        if (date.today() - giorno).days > SCADENZA_OUTPUT:
             shutil.rmtree(cartella)
             tolti += 1
+    for vuota in sorted(OUTPUT_DIR.glob("[0-9]" * 4 + "/*"), reverse=True) + sorted(OUTPUT_DIR.glob("[0-9]" * 4)):
+        if vuota.is_dir() and not any(vuota.iterdir()):  # mesi e anni rimasti vuoti
+            vuota.rmdir()
     if tolti:
         log.info("Pulizia: tolti %s file o cartelle scaduti", tolti)
 
@@ -344,7 +350,7 @@ def _esplora(sott: str, slot: str, cal: dict, storico: list[dict], creati: list,
 
 
 def _riepilogo(giorno: str, tema: str, pubblicati: list) -> Path:
-    """output/AAAA-MM-GG/riepilogo.md: i post del giorno con didascalie, pronti da pubblicare."""
+    """output/AAAA/MM/GG/altri/riepilogo.md: i post del giorno con didascalie, pronti da pubblicare."""
     righe = [f"# {QUANDO.isoformat()} · {giorno} · {tema}\n", f"_{riepilogo_consumi()}_\n"]
     for voce, paths in pubblicati:
         slide = ", ".join(p.name for p in paths if p.suffix == ".jpg" and "_reel_" not in p.name)
@@ -352,8 +358,9 @@ def _riepilogo(giorno: str, tema: str, pubblicati: list) -> Path:
         didascalia = next(p for p in paths if p.name.endswith("_didascalia.txt")).read_text(encoding="utf-8")
         avvisi = [f"> ⚠ **Da controllare:** {a}" for a in voce.get("da_controllare") or []]
         righe += [f"## {voce['slot']} · {voce['sottotema']}", *avvisi, f"**{voce['domanda']}** ({voce['numero']})",
-                  f"Slide: {slide}", f"Reel: {reel}", "", "```", didascalia, "```", ""]
-    path = paths[0].parent / "riepilogo.md"
+                  f"Slide: {slide}", f"Reel: {reel}",
+                  f"Video: {', '.join(p.name for p in paths if p.suffix == '.mp4') or '-'}", "", "```", didascalia, "```", ""]
+    path = cartella_giorno(QUANDO) / ALTRI / "riepilogo.md"
     path.write_text("\n".join(righe), encoding="utf-8")
     return path
 
@@ -367,7 +374,7 @@ def prossimo_lunedi(oggi: date | None = None) -> date:
 
 def gia_preparato(giorno: date) -> bool:
     """Ci sono già post per quel giorno di pubblicazione?"""
-    return any((OUTPUT_DIR / giorno.isoformat()).glob("*_rapporto.json"))
+    return any((cartella_giorno(giorno) / ALTRI).glob("*_rapporto.json"))
 
 
 def _durata(secondi: float) -> str:

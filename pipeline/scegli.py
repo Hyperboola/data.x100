@@ -409,6 +409,14 @@ def fascia_esaurita(sottotema: str, frequenza: str, cal: dict, istat: Istat | No
     return vecchi if flows and (vecchi >= minimo or vecchi == len(flows)) else 0
 
 
+def ambito(flow: str, titolo: str) -> list[str]:
+    """Quando un dataset non copre tutti (solo le grandi imprese, solo i capoluoghi), il post deve dirlo."""
+    trovati = [m.group(0).lower() for m in re.finditer(r"imprese con (?:almeno |oltre )?\d+ (?:addetti|dipendenti)", titolo, re.I)]
+    if "URBANENV" in flow.upper():  # "Dati ambientali nelle città": i comuni capoluogo di provincia
+        trovati.append("comuni capoluogo")
+    return trovati
+
+
 def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[str],
                         istat: Istat | None = None, serie_usate: set[str] | None = None, **_) -> dict:
     """Come scegli(), ma senza nessuna chiamata a Claude.
@@ -491,10 +499,14 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
             # "Persone di 6 anni e più per spettacoli a cui...: siti archeologici e monumenti": il titolo usa
             # la parte specifica, la spiegazione completa resta nel testo come "(...)"
             generale, breve = soggetto.rsplit(": ", 1)
+            if len(breve.split()) < 4 and ": " in generale:  # "...: frequenza di utilizzo del pc: tutti i giorni"
+                generale, prima = generale.rsplit(": ", 1)
+                breve = f"{prima}, {breve}"                    # → "frequenza di utilizzo del pc, tutti i giorni"
             soggetto = f"{generale} ({breve})"
         elif len(soggetto) > 40 and " (" in soggetto:  # "inflazione (prezzi al consumo per ...)": titolo "Inflazione"
             breve = soggetto.split(" (", 1)[0]
         parte = [PAROLE_GRUPPI.get(p.lower(), p) for p in nomi_scelti.get("parte", []) if p and p.lower() not in soggetto.lower()]
+        parte += [a for a in ambito(flow, f"{riga.percorso} {titolo}") if a not in soggetto.lower()]
         testo_parte = ", ".join(x[:1].lower() + x[1:] if x[1:2].islower() else x for x in parte)
         if parte:
             soggetto = f"{soggetto} ({testo_parte})"
@@ -508,7 +520,9 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
             fonte = min((categoria, titolo), key=len)
         fonte = _taglia(fonte, 90)
         # i conteggi ("arrivi", "nati") hanno come unità la cosa contata: "9,06 mln arrivi"
-        if not unita and len(soggetto.split()) <= 2 and not any(p in soggetto.lower() for p in NON_CONTEGGI):
+        if not unita and soggetto.lower().startswith("popolazione"):
+            unita = "residenti"  # "+21.481 residenti", non "+21.481 popolazione residente"
+        elif not unita and len(soggetto.split()) <= 2 and not any(p in soggetto.lower() for p in NON_CONTEGGI):
             unita = soggetto
         aree_scelte = filtri.get(variabile, []) if variabile else []
         nome_area = lambda c: dict(zip(codici["code"], codici["name"])).get(c, "")  # noqa: E731
@@ -524,6 +538,7 @@ def scegli_senza_claude(sottotema: str, frequenza: str, cal: dict, esclusi: set[
             "grafico": pref.get("grafico"), "nomi": {}, "altri": [],
             "occhiello": f"{NOMI_SOTTOTEMI.get(sottotema, _taglia(categoria, 24))} · {luogo}",
             "soggetto": soggetto, "unita": unita, "decimali": None,
+            "breve": None if Sogg.lower() == soggetto.lower() else Sogg[:1].lower() + Sogg[1:],  # per chiusura e note
             "domanda": (f"{Sogg}: quale {zona} è in testa?" if variabile
                         else f"{Sogg}: com'è andata nell'ultimo anno?" if frequenza == "mensile"
                         else f"{Sogg}: com'è andata negli ultimi anni?"),
@@ -650,13 +665,15 @@ _RUMORE = (re.compile(r"\s*\((base\s*)?\d{4}\s*=\s*100\)", re.I),          # "(b
            re.compile(r"\s*\(base \d{4}\)", re.I),                            # "(base 2025)"
            re.compile(r"\s*[-–]\s*dati (mensili|trimestrali|annuali)\b.*$", re.I),  # "- dati mensili"
            re.compile(r"\s*[-–]\s*(mensili|trimestrali|annuali)\b.*$", re.I),
-           re.compile(r"\s*[-–]\s*medie annue\b.*$", re.I))                     # "- medie annue"
+           re.compile(r"\s*[-–]\s*medie annue\b.*$", re.I),                     # "- medie annue"
+           re.compile(r"\s*[-–]\s*base\s+(?:[a-z]+\s+)?\d{4}\s*=\s*100\b", re.I))  # "- base dicembre 2021=100"
 
 
 def pulisci_soggetto(testo: str) -> str:
     """Via le note tecniche dei nomi ISTAT: 'Indice ... (base 2025=100) - dati mensili' → 'Indice ...'."""
     for r in _RUMORE:
         testo = r.sub("", testo)
+    testo = re.sub(r"^(P|p)opolazione (inizio|fine) periodo", r"\1opolazione residente", testo)
     return testo.strip(" -–:,")
 
 
@@ -668,6 +685,9 @@ def _soggetto_unita(codici, filtri: dict, titolo: str) -> tuple[str, str]:
     soggetto = pulisci_soggetto((indicatore or titolo).strip()) or (indicatore or titolo).strip()
     tutti = (" ".join(str(nomi.get((d, c), "")) for d, c in filtri.items() if isinstance(c, str)) + " " + titolo).lower()
     unita = _unita_da_nomi(tutti)
+    if m := re.search(r"\s*[-–(]\s*(milioni|migliaia|miliardi)\)?\s*$", soggetto, re.I):
+        soggetto = soggetto[:m.start()]  # "passeggeri annui ... - milioni": 3.089 sono milioni
+        unita = unita or m.group(1).lower()
     basso = soggetto.lower()
     if not unita and PERCENTUALI.search(basso):
         unita = "%"

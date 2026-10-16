@@ -66,13 +66,13 @@ def _valid(v) -> bool:
 
 
 # --- Dati per i template ---------------------------------------------------------------
-def _etichetta(v: float, decimali: int, unita: str, forma: str) -> str:
+def _etichetta(v: float, decimali: int, unita: str, forma: str, dec_compatto: int = 1) -> str:
     """Il valore sopra una colonna o un punto: sopra il milione in forma compatta ("139,6 mln"),
     altrimenti un numero a otto cifre diventa illeggibile nello spazio di una colonna."""
     if forma != "orizzontale" and abs(v) >= 1e6:
         for soglia, nome in ((1e9, "mld"), (1e6, "mln")):
             if abs(v) >= soglia:
-                return f"{fmt_it(v / soglia, 1)} {nome}"
+                return f"{fmt_it(v / soglia, dec_compatto)} {nome}"
     return f"{fmt_it(v, decimali)}{'' if unita in ('', '%') else ' '}{unita}"
 
 
@@ -139,6 +139,12 @@ def grafico(
         mostra = {validi[0], validi[-1], evidenzia,
                   max(validi, key=lambda i: valori[i]), min(validi, key=lambda i: valori[i])}
 
+    # decimali della forma compatta: quanti ne servono perché valori diversi non sembrino uguali
+    # (la popolazione si muove di poche decine di migliaia su 59 milioni: "58,937 mln", non "58,9 mln")
+    soglia = 1e9 if abs(massimo) >= 1e9 else 1e6
+    ampiezza = (massimo - minimo) / soglia
+    dec_compatto = 1 if ampiezza >= 1 else 2 if ampiezza >= 0.1 else 3
+
     barre = []
     for i, (etichetta, v) in enumerate(zip(etichette, valori)):
         ok = _valid(v)
@@ -146,7 +152,7 @@ def grafico(
             {
                 "etichetta": etichetta if (forma == "orizzontale" or i % passo == 0) else "",
                 "periodo": etichetta,
-                "testo": (testi_valori[i] if testi_valori else _etichetta(v, decimali, unita, forma)) if ok else "",
+                "testo": (testi_valori[i] if testi_valori else _etichetta(v, decimali, unita, forma, dec_compatto)) if ok else "",
                 "pct": scala(v) if ok else 0,
                 "x": round((i + 0.5) / n * 100, 2),  # centro della colonna: allinea punti ed etichette
                 "evidenzia": i == evidenzia,
@@ -356,20 +362,29 @@ def _video(browser, slides: list, destinazione: Path, common: dict, temporanea: 
         **common, formato="reel", larghezza=1080, altezza=1920, occhiello=grafico["occhiello"], tema=tema,
         titolo=grafico["titolo"] if in_copertina else numero["titolo"],
         finale=numero["titolo"] if in_copertina else grafico["titolo"], fonte=grafico["fonte"],
+        indice="Valori indice" in (grafico.get("nota") or "") + (numero.get("didascalia") or ""),
         dati={"barre": grafico["barre"], "forma": grafico["forma"], "riferimento": grafico.get("riferimento")})
     pagina_html = temporanea / "video.html"
     pagina_html.write_text(html, encoding="utf-8")
     page = browser.new_page(viewport={"width": 1080, "height": 1920}, device_scale_factor=1)
     page.goto(pagina_html.as_uri())
     page.evaluate("document.fonts.ready.then(() => true)")
-    comando = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-f", "image2pipe",
-               "-framerate", str(VIDEO_FPS), "-c:v", "mjpeg", "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-               "-crf", "20", "-movflags", "+faststart", str(destinazione)]
+    # Qualità alta per reggere la ricompressione di Instagram e TikTok: fotogrammi senza perdita (PNG), colori nello
+    # standard video (bt709, gamma "tv": senza, le app li leggono slavati), codifica pensata per la grafica piatta
+    # (tune animation) a qualità quasi senza perdita, e una traccia audio muta per la massima compatibilità.
+    comando = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error",
+               "-f", "image2pipe", "-framerate", str(VIDEO_FPS), "-c:v", "png", "-i", "-",
+               "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+               "-vf", "scale=in_range=full:out_range=tv:out_color_matrix=bt709,format=yuv420p",
+               "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+               "-c:v", "libx264", "-preset", "slow", "-tune", "animation", "-crf", "12", "-profile:v", "high",
+               "-level", "4.2", "-maxrate", "25M", "-bufsize", "50M", "-g", str(VIDEO_FPS * 2),
+               "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart", str(destinazione)]
     ffmpeg = subprocess.Popen(comando, stdin=subprocess.PIPE)
     try:
         for f in range(VIDEO_FPS * VIDEO_SECONDI):
             page.evaluate(f"frame({f / VIDEO_FPS})")
-            ffmpeg.stdin.write(page.screenshot(type="jpeg", quality=92))
+            ffmpeg.stdin.write(page.screenshot(type="png"))  # senza perdita: niente sbavature prima della codifica
     finally:
         ffmpeg.stdin.close()
         ffmpeg.wait()

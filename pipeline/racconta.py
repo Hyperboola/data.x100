@@ -284,6 +284,11 @@ def storia_serie(r: dict, df: pd.DataFrame, finestra: int) -> Storia:
     elif "VAR_PRIMO" in menu and abs(_cambio(v0, v1, tasso)) >= (1 if tasso else 10):
         cop, ev, titolo = "VAR_PRIMO", a1, f"{menu['VAR_PRIMO']['testo']} {a0.da} {a1.al}"
         did = f"{sogg}: da {menu['PRIMO']['testo']} {a0.quando} a {menu['ULTIMO']['testo']} {a1.quando}."
+    elif "VAR_DAL_MASSIMO" in menu and _cambio(vmax, v1, tasso) <= (-1 if tasso else -5):
+        # es. il trasporto pubblico: ancora sotto il 2019. "Il picco è stato nel 2019" direbbe meno
+        cop, ev, titolo = "VAR_DAL_MASSIMO", a1, f"{menu['VAR_DAL_MASSIMO']['testo']} rispetto al picco {amax.quando}"
+        did = (f"{sogg} {a1.quando}: {menu['ULTIMO']['testo']}, {menu['VAR_DAL_MASSIMO']['testo']} "
+               f"rispetto al picco {amax.quando} ({menu['MASSIMO']['testo']}).")
     else:
         cop, ev, titolo = "MASSIMO", amax, f"Il picco è stato {amax.quando}"
         did = (f"{sogg} {amax.quando}: da allora mai più così in alto." if amax == a0
@@ -295,6 +300,9 @@ def storia_serie(r: dict, df: pd.DataFrame, finestra: int) -> Storia:
               "chiusura": ["ULTIMO", "VAR_PRIMO"] if "VAR_PRIMO" in menu else ["ULTIMO"]}
     testi = _testi_base(r, did, titolo, nota + ".", f"{sogg} {a1.quando}.", f"{a0.rispetto}.")
     grafici = ("colonne", "linea") if ritmo else ("colonne", "linea", "area")
+    if cop == "VAR_DAL_MASSIMO":  # la chiusura ripete il confronto della storia: con il picco, non con il primo anno
+        scelte["chiusura"] = ["ULTIMO", "VAR_DAL_MASSIMO"]
+        testi["punto_2"] = f"Rispetto al picco {amax.quando}."
 
     indice = numero_indice(r) and not ritmo
     if indice:
@@ -343,6 +351,20 @@ def storia_serie(r: dict, df: pd.DataFrame, finestra: int) -> Storia:
              "dati": _dati({r["soggetto"]: coppie}, dec, unita)}
     if not proiezione and (avviso := salto_insolito(coppie, tasso)):
         extra["da_controllare"] = [avviso]
+    # Serie quasi ferme (es. la popolazione: poche migliaia su 59 milioni). In percentuale verrebbe sempre "+0,0%"
+    # e sulle colonne o sull'area, che partono da zero, una riga piatta: si raccontano le differenze in valore
+    # assoluto, su una linea con la scala stretta (e lo si dice).
+    if not tasso and not ritmo and not indice and media and (vmax - vmin) / abs(media) < 0.01:
+        anno_prima = a1.anno_prima() if a1.freq != "A" else None
+        rif = (Periodo.da_codice(anno_prima), serie[anno_prima]) if anno_prima in serie else (a0, v0)
+        menu["DIFF_RIF"] = _voce_diff(f"differenza assoluta {rif[0].da} {a1.al}", v1 - rif[1], dec, unita)
+        cambio, sul_prec = menu["DIFF_RIF"]["testo"], _voce_diff("", v1 - vp, dec, unita)["testo"]
+        scelte.update(copertina="DIFF_RIF", evidenzia=a1.codice, grafico="linea", chiusura=["ULTIMO", "DIFF_RIF"])
+        testi = _testi_base(r, f"{_maiuscola(sogg)} {a1.quando}: {menu['ULTIMO']['testo']}, {cambio} {rif[0].rispetto}.",
+                            f"{cambio} {rif[0].rispetto}",
+                            f"{_maiuscola(a1.quando)}: {menu['ULTIMO']['testo']}, {sul_prec} {ap.rispetto}. "
+                            "La scala non parte da zero.", f"{_maiuscola(sogg)} {a1.quando}.", f"{_maiuscola(rif[0].rispetto)}.")
+        grafici = ("linea",)
     if min(v for _, v in coppie) < 0:  # colonne e area partono da zero: con valori negativi solo la linea
         grafici = ("linea",)
     return Storia("serie", menu, {q.codice: q.nome for q, _ in coppie}, grafici,
@@ -593,8 +615,13 @@ def _impagina(stile: str, numero: tuple, grafico: tuple, testi: dict) -> list:
     # grafico in copertina: la domanda è il suo titolo; il numero grande passa alla 2ª slide
     copertina_g = {**d_gr, "tema": sfondo_cop, "copertina": True, "titolo": testi["domanda"],
                    "nota": testi["didascalia_copertina"], "pagina": ""}
-    seconda = {**d_num, "tema": sfondo_2, "titolo": testi["titolo_grafico"], "didascalia": testi["nota_grafico"],
-               "pagina": "2/3"}
+    # il titolo non ripete il numero che c'è subito sotto: "−10,0% rispetto al picco" → "Rispetto al picco"
+    titolo = testi["titolo_grafico"]
+    for ripetuto in (d_num.get("numero") or "", d_num.get("unita") or ""):
+        if ripetuto and titolo.startswith(ripetuto):
+            titolo = titolo[len(ripetuto):].strip()
+    seconda = {**d_num, "tema": sfondo_2, "titolo": _maiuscola(titolo) if titolo else testi["titolo_grafico"],
+               "didascalia": testi["nota_grafico"], "pagina": "2/3"}
     return [(t_gr, copertina_g), (t_num, seconda)]
 
 
@@ -642,6 +669,9 @@ def costruisci_carosello(r: dict, df: pd.DataFrame, finestra: int, nomi: dict[st
             scelte.update(dati["scelte"])
             testi.update(dati["testi"])
             origine[gruppo] = "claude"
+    if (breve := r.get("breve")) and not imposto:  # nomi ISTAT lunghi: per esteso solo sotto il numero di copertina
+        for campo in ("punto_1", "punto_2", "nota_grafico"):
+            testi[campo] = testi[campo].replace(_maiuscola(r["soggetto"]), _maiuscola(breve)).replace(r["soggetto"], breve)
     if scelte["grafico"] not in st.grafici:  # es. colonne con valori negativi: si usa un grafico adatto ai dati
         scelte["grafico"] = st.grafici[0]
     if not scelte.get("stile") or scelte["stile"] not in STILI:  # i post già fatti tengono il loro stile

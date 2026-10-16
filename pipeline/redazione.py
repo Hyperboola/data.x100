@@ -19,6 +19,7 @@ import html
 import json
 import re
 import logging
+import threading
 import webbrowser
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -44,6 +45,9 @@ LIMITI = {campo: n for g in GRUPPI.values() for campo, n in g.items()}
 # campi della serie, modificabili anche loro: compaiono nelle slide
 ETICHETTE_SERIE = {"occhiello": "Occhiello (in alto nelle slide)", "unita": "Unità di misura (es. %, €, anni, per 100 famiglie)",
                    "fonte_testo": "Fonte (in fondo alle slide)"}
+# Una rigenerazione alla volta: il server tratta le richieste in parallelo, e due rigenerazioni dello stesso post
+# insieme scriverebbero gli stessi file (è così che un video è venuto fermo).
+BLOCCO_RIGENERA = threading.Lock()
 NOMI_STILI = {"numero_scuro": "Numero · sfondo scuro", "grafico_chiaro": "Grafico · sfondo chiaro",
               "numero_arancio": "Numero · sfondo arancione", "numero_chiaro": "Numero · sfondo chiaro",
               "grafico_scuro": "Grafico · sfondo scuro"}
@@ -386,7 +390,7 @@ def pagina(giorno: str, messaggi: dict[str, str]) -> str:
             f'<label>Grafico</label><select name="grafico">{grafico}</select>{campi_serie}{campi}'
             + (f'<label class="verifica"><input type="checkbox" name="verificato" value="1" style="width:auto"> '
                f'Ho verificato gli avvisi ⚠ sui dati e il post è corretto</label>' if rap.get("da_controllare") else "")
-            + f'<button name="azione" value="salva">Salva e rigenera</button>'
+            + '''<button name="azione" value="salva" onclick="if(this.form.dataset.invio){event.preventDefault()}else{this.form.dataset.invio=1;this.textContent='Rigenero… ci vuole circa un minuto'}">Salva e rigenera</button>'''
             f'<button class="approva" name="azione" value="approva">Approva</button>'
             f'<a class="serie" href="{cambia}">Cambia serie…</a></form></div>')
     corpo = "".join(blocchi) or "<p>Nessun post per questo giorno.</p>"
@@ -500,7 +504,8 @@ def avvia(giorno: str, porta: int = PORTA) -> None:
                         approva(path)
                         messaggi[nome] = '<div class="ok">✅ Post approvato.</div>'
                 else:
-                    rigenera(path, testi, dati.get("grafico"), serie_nuova, dati.get("stile"))
+                    with BLOCCO_RIGENERA:
+                        rigenera(path, testi, dati.get("grafico"), serie_nuova, dati.get("stile"))
                     avvisi = numeri_sconosciuti(_leggi(path), testi)
                     messaggi[nome] = '<div class="ok">✓ Slide rigenerate.</div>' + "".join(
                         f'<div class="avviso">Numeri che non compaiono nei dati: {html.escape(a)}</div>' for a in avvisi)

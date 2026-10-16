@@ -40,7 +40,7 @@ from pipeline.claude import riepilogo_consumi
 from pipeline.disegna import ALTRI, OUTPUT_DIR, POST, cartella_giorno, render
 from pipeline.periodi import Periodo
 from pipeline.racconta import costruisci_carosello
-from pipeline.scegli import (DatasetEsauriti, NessunaSerie, SerieNonValida, fascia_esaurita, pulisci_nome, scegli,
+from pipeline.scegli import (DatasetEsauriti, NessunaSerie, SerieNonValida, fascia_esaurita, pulisci_nome, scegli, segna_scartato,
                              scegli_senza_claude)
 from sources.istat import Istat
 from sources.rete import FonteNonDisponibile
@@ -255,7 +255,7 @@ def giornata(cal: dict, preferiti: list[dict], giorno: str, usa_claude: bool = T
             for slot in rimaste:
                 # la fascia preferita ha un solo giro (8 dataset): se lì non c'è, si passa subito alla
                 # successiva, che riusa quello che si è appena letto. L'ultima fascia ha tutti i giri.
-                giri = TENTATIVI_ESPLORAZIONE if slot == rimaste[-1] else 1
+                giri = TENTATIVI_ESPLORAZIONE if slot == rimaste[-1] else 2
                 if _esplora(sott, slot, cal, storico, creati, pubblicati, usa_claude, giri=giri):
                     usate.add(slot)
                     break
@@ -274,9 +274,12 @@ def _pubblica(s: dict, cal: dict, usa_claude: bool, storico: list[dict], creati:
         paths, voce = esegui(s, cal, usa_claude, storico=storico)
     except NonPubblicabile as exc:
         log.info("%s/%s: salto %s, %s", s["sottotema"], s["frequenza"], s["id"], exc)
+        segna_scartato(s["flow"])
         return False
     except Exception as exc:  # fonte giù, filtri sbagliati...: si prova la prossima
         log.warning("%s/%s: %s non riuscita: %s", s["sottotema"], s["frequenza"], s["id"], exc)
+        if not isinstance(exc, FonteNonDisponibile):  # se è ISTAT a essere giù, il dataset non c'entra
+            segna_scartato(s["flow"])  # altrimenti lo si riscaricherebbe e fallirebbe uguale ad ogni lancio
         return False
     _registra(voce)
     storico.append(voce)

@@ -29,6 +29,7 @@ TECNICI = ("base ", "pesi", "ponderazion", "deflator", "destagionalizzat", "conc
 MEMORIA = RAW_DIR / "istat" / "freschezza.json"  # ultimo periodo noto di ogni dataset, per frequenza
 MEMORIA_GIORNI = 30      # "ultimo dato del 2025": può cambiare a ogni nuova pubblicazione ISTAT
 MEMORIA_STRUTTURA = 180  # "nessun dato mensile in questo dataset": cambia raramente
+MEMORIA_SCARTATO = 14    # dataset da cui non si è riusciti a fare un post (pochi periodi, nessun dato...)
 MINUTI_SCELTA = 5    # tempo massimo per trovare un dataset buono in una chiamata
 MAX_CODICI = 40      # codici mostrati per ogni dimensione
 TOTALI = {"IT", "9", "T", "TOTAL", "99", "ALL", "TOT"}
@@ -197,6 +198,11 @@ def _noto_vecchio(memoria: dict, flow: str, frequenza: str, soglia: int) -> bool
     m = memoria.get(flow)
     if not m:
         return False
+    oggi = date.today()
+    if m.get("timeout") == oggi.isoformat():  # è andato in timeout oggi: non lo si richiede ad ogni tentativo
+        return True
+    if m.get("scartato") and (oggi - date.fromisoformat(m["scartato"])).days <= MEMORIA_SCARTATO:
+        return True  # già provato e non raccontabile: non si ripete il download a ogni lancio
     eta = _eta_memoria(m)
     if m.get("lento"):
         return eta <= MEMORIA_GIORNI
@@ -225,6 +231,14 @@ def _timeout(memoria: dict, flow: str) -> bool:
     MEMORIA.parent.mkdir(parents=True, exist_ok=True)
     MEMORIA.write_text(json.dumps(memoria, indent=1))
     return False
+
+
+def segna_scartato(flow: str) -> None:
+    """Un dataset da cui non è uscito un post (pochi periodi, nessun dato...) si salta per 14 giorni."""
+    memoria = _memoria()
+    memoria[flow] = {**memoria.get(flow, {"verificato": "2000-01-01"}), "scartato": date.today().isoformat()}
+    MEMORIA.parent.mkdir(parents=True, exist_ok=True)
+    MEMORIA.write_text(json.dumps(memoria, indent=1))
 
 
 def _segna_lento(memoria: dict, flow: str) -> None:
@@ -350,11 +364,16 @@ def _unita_da_nomi(testo: str) -> str:
 
 
 # --- Senza Claude: dataset e serie scelti con regole ---------------------------------------------
+# Voci residuali di un dataset: raccolgono i casi che non si sanno attribuire. Una serie fatta solo di quelle non
+# racconta il fenomeno (91 mila arrivi "con regione non indicata" non sono il turismo italiano).
+RESIDUALE = re.compile(r"non (indicat|specificat|classificat|dichiarat|determinat|ripartit)|sconosciut|"
+                       r"not (stated|specified|indicated)|unknown", re.I)
 PAROLE_GRUPPI = {"maschi": "uomini", "femmine": "donne"}  # come si dice sui social
 PAROLE_TOTALE = ("total", "tutte", "tutti", "complesso", "mondo", "world", "indice generale")
 # Dimensioni che descrivono COSA si misura (indicatore, unità, base): il codice scelto lì è già nel soggetto.
 # In tutte le altre, se non si sceglie il totale, la serie è solo una parte e il soggetto deve dirlo.
-DESCRITTIVE = ("FREQ", "DATA_TYPE", "INDICATOR", "MEASURE", "TIPO_DATO", "UNIT", "BASE", "TIPO_IND")
+DESCRITTIVE = ("FREQ", "DATA_TYPE", "INDICATOR", "MEASURE", "TIPO_DATO", "UNIT", "BASE", "TIPO_IND",
+               "EDITION", "VINTAGE", "RELEASE")  # le ultime: la data di pubblicazione dei dati, non cosa misurano
 # Nomi da mostrare in alto nelle slide, sottotema per sottotema
 NOMI_SOTTOTEMI = {
     "prezzi": "Prezzi", "stipendi_redditi": "Stipendi e redditi", "risparmio_debiti": "Risparmi e debiti",
@@ -597,7 +616,10 @@ def scegli_codici(fresche, codici, frequenza: str, titolo: str, pref: dict, forz
             scelto = totali[0]
         else:  # es. l'indicatore: quello il cui nome somiglia di più al titolo del dataset
             somiglianza = lambda c: len(parole_titolo & set(nomi.get((d, c), "").lower().split()))  # noqa: E731
-            scelto = max(presenti, key=somiglianza)
+            ok = [c for c in presenti if not RESIDUALE.search(str(nomi.get((d, c), "")))]
+            if not ok:
+                return None  # ci sono solo voci residuali: questa serie non rappresenta niente, si cerca un altro dataset
+            scelto = max(ok, key=somiglianza)
         if scelto not in totali and not e_territorio and len(presenti) > 1 and not any(k in d.upper() for k in DESCRITTIVE):
             # una sola voce tra tante (es. un prodotto del paniere, le donne): va detto nel soggetto
             utili.setdefault("parte", []).append(pulisci_soggetto(nomi.get((d, scelto), scelto)))

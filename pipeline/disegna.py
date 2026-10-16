@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -372,6 +374,10 @@ def _video(browser, slides: list, destinazione: Path, common: dict, temporanea: 
     # Qualità alta per reggere la ricompressione di Instagram e TikTok: fotogrammi senza perdita (PNG), colori nello
     # standard video (bt709, gamma "tv": senza, le app li leggono slavati), codifica pensata per la grafica piatta
     # (tune animation) a qualità quasi senza perdita, e una traccia audio muta per la massima compatibilità.
+    # Si scrive in un file provvisorio e solo a video finito lo si mette al posto di quello vero (sostituzione
+    # atomica): due rigenerazioni insieme non possono più mescolare i byte dello stesso file, e chi sta guardando il
+    # video vede sempre quello vecchio o quello nuovo, mai un mezzo file.
+    provvisorio = destinazione.with_name(f"{destinazione.stem}.{uuid.uuid4().hex[:8]}.tmp.mp4")
     comando = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error",
                "-f", "image2pipe", "-framerate", str(VIDEO_FPS), "-c:v", "png", "-i", "-",
                "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
@@ -379,14 +385,20 @@ def _video(browser, slides: list, destinazione: Path, common: dict, temporanea: 
                "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
                "-c:v", "libx264", "-preset", "slow", "-tune", "animation", "-crf", "12", "-profile:v", "high",
                "-level", "4.2", "-maxrate", "25M", "-bufsize", "50M", "-g", str(VIDEO_FPS * 2),
-               "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart", str(destinazione)]
+               "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart", str(provvisorio)]
     ffmpeg = subprocess.Popen(comando, stdin=subprocess.PIPE)
     try:
-        for f in range(VIDEO_FPS * VIDEO_SECONDI):
-            page.evaluate(f"frame({f / VIDEO_FPS})")
-            ffmpeg.stdin.write(page.screenshot(type="png"))  # senza perdita: niente sbavature prima della codifica
+        try:
+            for f in range(VIDEO_FPS * VIDEO_SECONDI):
+                page.evaluate(f"frame({f / VIDEO_FPS})")
+                ffmpeg.stdin.write(page.screenshot(type="png"))  # senza perdita: niente sbavature prima della codifica
+        finally:
+            ffmpeg.stdin.close()
+            ffmpeg.wait()
+            page.close()
+        if ffmpeg.returncode != 0:
+            return None
+        os.replace(provvisorio, destinazione)
+        return destinazione
     finally:
-        ffmpeg.stdin.close()
-        ffmpeg.wait()
-        page.close()
-    return destinazione if ffmpeg.returncode == 0 else None
+        provvisorio.unlink(missing_ok=True)  # se è rimasto (errore a metà), non lascia file in giro

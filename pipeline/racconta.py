@@ -695,7 +695,7 @@ def costruisci_carosello(r: dict, df: pd.DataFrame, finestra: int, nomi: dict[st
                    st.disegna(scelte, testi, fonte), testi),
         chiusura(punti=punti, invito=testi["invito"], pagina="3/3"),
     ]
-    testo_ig = f"{testi['post']}\n\n{fonte}. Elaborazione Data%. {LICENZA}.\n\n{HASHTAG}"
+    testo_ig = f"{testi['post']}\n\n{fonte}. Elaborazione aperidata. {LICENZA}.\n\n{HASHTAG}"
     return slides, testo_ig, rapporto
 
 

@@ -30,11 +30,11 @@
 {% block body %}
 <div class="slide {{ 'chiara' if tipo == 'punti' else 'scura' }}{{ ' calendario' if tipo == 'calendario' else '' }}{{ ' reel' if formato == 'reel' }}">
   <div class="testata">
-    <div class="logo">Data<span>%</span></div>
+    <div class="logo">aperi<span>data</span></div>
     <div class="occhiello mono">{{ occhiello }}</div>
   </div>
   <div class="centro">
-    {% if tipo == "chiusura" %}<div class="logo grande-logo">Data<span>%</span></div>{% endif %}
+    {% if tipo == "chiusura" %}<div class="logo grande-logo">aperi<span>data</span></div>{% endif %}
     <div class="titolo {{ 'grande' if tipo == 'apertura' else 'medio' }}">{{ titolo | safe }}</div>
     {% if sottotitolo %}<div class="sotto">{{ sottotitolo }}</div>{% endif %}
     {% if punti %}<div class="punti">{% for p in punti %}<div class="punto"><div class="sx">{{ p.sx }}</div><div class="dx">{{ p.dx }}</div></div>{% endfor %}</div>{% endif %}

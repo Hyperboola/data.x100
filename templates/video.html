@@ -28,14 +28,14 @@
 {% endblock %}
 {% block body %}
 <div class="v {{ tema }}" style="position: relative">
-  <div class="testata"><div class="logo">Data<span>%</span></div><div class="occhiello mono">{{ occhiello }}</div></div>
+  <div class="testata"><div class="logo">aperi<span>data</span></div><div class="occhiello mono">{{ occhiello }}</div></div>
   <div class="titolo" id="titolo">{{ titolo }}</div>
   <div class="contatore"><div class="numero" id="valore"></div>
     <div class="accanto"><div class="unita" id="unita"></div><div class="periodo" id="periodo"></div></div></div>
   <div class="grafico" id="grafico"><svg id="svg"></svg></div>
   <div class="finale" id="finale">{{ finale }}</div>
   <div class="piede"><div class="fonte">{{ fonte }}</div></div>
-  <div class="cta" id="cta"><div class="logo">Data<span>%</span></div><div class="riga">Segui @data.x100 · un dato al giorno</div></div>
+  <div class="cta" id="cta"><div class="logo">aperi<span>data</span></div><div class="riga">Segui @aperidata · un dato al giorno</div></div>
 </div>
 <script>
 const D = {{ dati | tojson }};

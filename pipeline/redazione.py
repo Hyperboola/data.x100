@@ -390,7 +390,7 @@ def pagina(giorno: str, messaggi: dict[str, str]) -> str:
             f'<button class="approva" name="azione" value="approva">Approva</button>'
             f'<a class="serie" href="{cambia}">Cambia serie…</a></form></div>')
     corpo = "".join(blocchi) or "<p>Nessun post per questo giorno.</p>"
-    return _pagina("Redazione Data%", f'<h1>Redazione Data<span>%</span> · {giorno}</h1>{_navigazione(giorno)}{corpo}')
+    return _pagina("Redazione aperidata", f'<h1>Redazione aperi<span>data</span> · {giorno}</h1>{_navigazione(giorno)}{corpo}')
 
 
 def pagina_serie(giorno: str, file: str, errore: str = "") -> str:

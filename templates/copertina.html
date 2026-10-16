@@ -18,7 +18,7 @@
 .didascalia { margin-top: 16px; font-size: 32px; line-height: 1.35; color: var(--testo-chiaro); max-width: 820px; }
 .piede { color: var(--grigio-chiaro); align-items: center; }
 .piede .scorri { color: var(--nebbia); font-weight: 500; white-space: nowrap; }
-/* Varianti di stile (stessi colori Data%, sfondi diversi): chiara e arancio */
+/* Varianti di stile (stessi colori aperidata, sfondi diversi): chiara e arancio */
 .slide.chiara .occhiello, .slide.chiara .piede { color: var(--grigio-nota); }
 .slide.chiara .didascalia { color: #3B4250; }
 .slide.chiara .piede .scorri, .slide.chiara .piede .pagina { color: var(--inchiostro); }
@@ -34,7 +34,7 @@
 {% set size = 196 if n <= 10 else (160 if n <= 13 else 128) %}
 <div class="slide {{ tema | default('scura') }}{{ ' reel' if formato == 'reel' }}">
   <div class="testata">
-    <div class="logo">Data<span>%</span></div>
+    <div class="logo">aperi<span>data</span></div>
     <div class="occhiello mono">{{ occhiello }}</div>
   </div>
   <div class="centro">

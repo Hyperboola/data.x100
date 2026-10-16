@@ -23,7 +23,7 @@ from sources.rete import Client, ErroreFonte, NessunDato
 
 SDMX = "https://esploradati.istat.it/SDMXWS/rest"
 SITO = "https://esploradati.istat.it/databrowserhub/api/core/nodes/1"
-USER_AGENT = "data_x100/1.0 (Data%, divulgazione statistica; https://instagram.com/data.x100)"
+USER_AGENT = "aperidata/1.0 (divulgazione statistica; https://instagram.com/aperidata)"
 CSV = "application/vnd.sdmx.data+csv;version=1.0.0"
 XML = "application/xml"
 NS = {"s": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/structure",

@@ -1,4 +1,4 @@
-"""Identità visiva di Data% (@data.x100).
+"""Identità visiva di aperidata (@aperidata).
 
 Unica fonte di verità per colori e caratteri: le slide importano da qui,
 così un cambio di palette si propaga ovunque.

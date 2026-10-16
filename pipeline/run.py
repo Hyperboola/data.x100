@@ -1,4 +1,4 @@
-"""La giornata di Data%: calendario → serie → storia → slide.
+"""La giornata di aperidata: calendario → serie → storia → slide.
 
     python -m pipeline.run                          # i post di oggi
     python -m pipeline.run --settimana              # i post della prossima settimana, da lunedì a domenica
@@ -393,7 +393,7 @@ def _timer() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Genera i caroselli di Data%")
+    parser = argparse.ArgumentParser(description="Genera i caroselli di aperidata")
     parser.add_argument("--giorno", choices=GIORNI, help="esegui come se fosse questo giorno")
     parser.add_argument("--serie", help="genera una serie di preferiti.toml, senza registrarla")
     parser.add_argument("--forza", action="store_true", help="con --serie: ignora la freschezza")

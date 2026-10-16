@@ -1,6 +1,6 @@
-# Data% · pipeline
+# aperidata · pipeline
 
-Dai dati ISTAT ai caroselli Instagram di **Data%** (@data.x100).
+Dai dati ISTAT ai caroselli Instagram di **aperidata** (@aperidata).
 I numeri li calcola il codice; la scelta della storia e i testi li fa Claude.
 
 ## Il giro
